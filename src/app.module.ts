@@ -8,6 +8,7 @@ import { InstrumentsModule } from './instruments/instruments.module';
 import { postgresConfig } from './config/postgres.config';
 import { ClickHouseModule } from '@depyronick/nestjs-clickhouse';
 import { clickhouseConfig } from './config/clickhouse.config';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { clickhouseConfig } from './config/clickhouse.config';
     ClickHouseModule.register([clickhouseConfig]),
     UsersModule,
     InstrumentsModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
