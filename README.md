@@ -96,3 +96,8 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+
+https://dzlab.github.io/debezium/2024/06/09/debezium-kafka/
+export DEBEZIUM_VERSION=2.1
+docker-compose -f docker-compose.yml up
