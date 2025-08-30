@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
+import { InstrumentsModule } from './instruments/instruments.module';
 import { databaseConfig } from './config/database.config';
 
 @Module({
@@ -11,6 +12,7 @@ import { databaseConfig } from './config/database.config';
     ConfigModule.forRoot(),
     TypeOrmModule.forRoot(databaseConfig),
     UsersModule,
+    InstrumentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
