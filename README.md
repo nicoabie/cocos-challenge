@@ -98,6 +98,21 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
 
 
+https://github.com/ClickHouse/clickhouse-kafka-connect/releases
+
 https://dzlab.github.io/debezium/2024/06/09/debezium-kafka/
 export DEBEZIUM_VERSION=2.1
 docker-compose -f docker-compose.yml up
+
+
+curl -i -X POST -H "Accept:application/json" -H  "Content-Type:application/json" http://localhost:8083/connectors/ -d @register-postgres.json
+
+curl -X DELETE localhost:8083/connectors/postgres-connector
+
+
+curl localhost:8083/connectors/postgres-connector/status
+
+
+
+curl -i -X POST -H "Accept:application/json" -H  "Content-Type:application/json" http://localhost:8083/connectors/ -d @register-clickhouse.json
+

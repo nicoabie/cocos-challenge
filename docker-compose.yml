@@ -29,12 +29,17 @@ services:
     links:
      - kafka
      - postgres
+     - clickhouse
+    volumes:
+      # mount clickhouse connector jar(s)
+      - ./plugins/clickhouse:/kafka/connectors
     environment:
      - BOOTSTRAP_SERVERS=kafka:9092
      - GROUP_ID=1
      - CONFIG_STORAGE_TOPIC=my_connect_configs
      - OFFSET_STORAGE_TOPIC=my_connect_offsets
      - STATUS_STORAGE_TOPIC=my_connect_statuses
+     - CONNECT_PLUGIN_PATH=/kafka/connect,/kafka/connectors
   clickhouse:
     image: clickhouse/clickhouse-server
     ports:

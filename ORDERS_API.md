@@ -22,58 +22,88 @@ Crea una nueva orden en el mercado.
 }
 ```
 
-**Ejemplos de uso:**
+**Ejemplos cURL:**
 
-1. **Orden MARKET de compra por cantidad específica:**
-```json
-{
-  "userId": 1,
-  "instrumentId": 47,
-  "size": 50,
-  "type": "MARKET",
-  "side": "BUY"
-}
+#### 1. **Orden MARKET de compra por cantidad específica:**
+```bash
+curl -X POST http://localhost:3000/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 1,
+    "instrumentId": 47,
+    "size": 50,
+    "type": "MARKET",
+    "side": "BUY"
+  }'
 ```
 
-2. **Orden MARKET de compra por monto total:**
-```json
-{
-  "userId": 1,
-  "instrumentId": 47,
-  "totalAmount": 46500,
-  "type": "MARKET",
-  "side": "BUY"
-}
+#### 2. **Orden MARKET de compra por monto total:**
+```bash
+curl -X POST http://localhost:3000/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 1,
+    "instrumentId": 47,
+    "totalAmount": 46500,
+    "type": "MARKET",
+    "side": "BUY"
+  }'
 ```
 
-3. **Orden LIMIT de compra:**
-```json
-{
-  "userId": 1,
-  "instrumentId": 47,
-  "size": 60,
-  "price": 920.00,
-  "type": "LIMIT",
-  "side": "BUY"
-}
+#### 3. **Orden LIMIT de compra:**
+```bash
+curl -X POST http://localhost:3000/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 1,
+    "instrumentId": 47,
+    "size": 60,
+    "price": 920.00,
+    "type": "LIMIT",
+    "side": "BUY"
+  }'
 ```
 
-4. **Orden MARKET de venta:**
-```json
-{
-  "userId": 1,
-  "instrumentId": 47,
-  "size": 10,
-  "type": "MARKET",
-  "side": "SELL"
-}
+#### 4. **Orden MARKET de venta:**
+```bash
+curl -X POST http://localhost:3000/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 1,
+    "instrumentId": 47,
+    "size": 10,
+    "type": "MARKET",
+    "side": "SELL"
+  }'
+```
+
+#### 5. **Transferencia de efectivo (ingreso):**
+```bash
+curl -X POST http://localhost:3000/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 1,
+    "instrumentId": 66,
+    "size": 100000,
+    "price": 1,
+    "type": "MARKET",
+    "side": "CASH_IN"
+  }'
 ```
 
 #### PATCH /orders/:id/cancel
 Cancela una orden existente (solo órdenes con estado NEW).
 
+```bash
+curl -X PATCH http://localhost:3000/orders/123/cancel
+```
+
 #### GET /orders/user/:userId
 Obtiene todas las órdenes de un usuario específico.
+
+```bash
+curl -X GET http://localhost:3000/orders/user/1
+```
 
 ### Estados de las órdenes
 
