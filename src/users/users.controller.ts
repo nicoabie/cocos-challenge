@@ -1,4 +1,10 @@
-import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  NotFoundException,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './user.entity';
 
@@ -12,19 +18,33 @@ export class UsersController {
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number): Promise<User> {
-    return this.usersService.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number): Promise<User> {
+    const user = await this.usersService.findOne(id);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+    return user;
   }
 
   @Get('email/:email')
-  findByEmail(@Param('email') email: string): Promise<User> {
-    return this.usersService.findByEmail(email);
+  async findByEmail(@Param('email') email: string): Promise<User> {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new NotFoundException(`User with email ${email} not found`);
+    }
+    return user;
   }
 
   @Get('account/:accountNumber')
-  findByAccountNumber(
+  async findByAccountNumber(
     @Param('accountNumber') accountNumber: string,
   ): Promise<User> {
-    return this.usersService.findByAccountNumber(accountNumber);
+    const user = await this.usersService.findByAccountNumber(accountNumber);
+    if (!user) {
+      throw new NotFoundException(
+        `User with account number ${accountNumber} not found`,
+      );
+    }
+    return user;
   }
 }
