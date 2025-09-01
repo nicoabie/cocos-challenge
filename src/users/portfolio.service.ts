@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Order, OrderSide, OrderStatus } from '../orders/order.entity';
 import { PortfolioDto } from './dto/portfolio.dto';
 
+const ARS_TICKER = 'ARS';
+
 @Injectable()
 export class PortfolioService {
   constructor(
@@ -18,13 +20,13 @@ export class PortfolioService {
     // hablando de ORMS a mí mucho no me convencen y hace un par de años empecé a hacer mi ORM en contra de otros, irónico, no?
     // https://github.com/agiletiger/ojotas hoy en día si tuviese que interactuar con postgres usaría https://pgtyped.dev/
 
-    // también en cierto que net_amount es en realidad del tipo number pero typeorm no sabe esto y lo devuelve como string... 
+    // también en cierto que net_amount es en realidad del tipo number pero typeorm no sabe esto y lo devuelve como string...
     const arsQuery = this.ordersRepository.query<{ net_amount: string }[]>(
       `
       SELECT
 	      sum(
 	      	CASE
-	      		WHEN side = 'CASH_IN' THEN size * price
+	      		WHEN side = '${OrderSide.CASH_IN}' THEN size * price
  	      		ELSE - size * price
 	      	END
 	      ) AS net_amount
@@ -33,13 +35,13 @@ export class PortfolioService {
         JOIN instruments on instrumentid = instruments.id
         WHERE
         	userid = $1
-        	AND side IN ('CASH_IN', 'CASH_OUT')
-        	AND status IN ('FILLED')
+        	AND side IN ('${OrderSide.CASH_IN}', '${OrderSide.CASH_OUT}')
+        	AND status = '${OrderStatus.FILLED}'
         	AND ticker = $2
         GROUP BY
         	instruments.id;
     `,
-      [userId, 'ARS'],
+      [userId, ARS_TICKER],
     );
 
     // mismo pasa con el resultado de esta query, tengo que decirle que son strings para luego saber que tengo que transformarlos con Number
@@ -71,8 +73,8 @@ export class PortfolioService {
 	      	FROM
 	      		orders
 	      	WHERE
-	      		side = 'BUY'
-	      		AND status = 'FILLED'
+	      		side = '${OrderSide.BUY}'
+	      		AND status = '${OrderStatus.FILLED}'
             AND userid = $1
 	      	GROUP BY
 	      		userid,
@@ -87,8 +89,8 @@ export class PortfolioService {
 	      	FROM
 	      		orders
 	      	WHERE
-	      		side = 'SELL'
-	      		AND STATUS = 'FILLED'
+	      		side = '${OrderSide.SELL}'
+	      		AND STATUS = '${OrderStatus.FILLED}'
             AND userid = $2
 	      	GROUP BY
 	      		userid,
@@ -125,6 +127,11 @@ export class PortfolioService {
       `,
       [userId, userId],
     );
+
+    // es importante destacar que si bien tengo que obtener todas las posiciones, la parte heavy de la cuenta se hace en la base de datos.
+    // esto es una decisión consciente dado que las bases de datos están optimizadas para ese tipo de trabajo y nodejs es single threaded.
+    // si dedico mucho tiempo en atender una petición, eso hace que las demás requests deban esperar por como funciona el event loop.
+    // he visto muchas veces donde se hace demasiado en el servidor cosas que la base de datos podría resolver. luego está monitorear la base de datos.
 
     // estas dos las puedo hacer de manera concurrente
     const [positions, ars] = await Promise.all([positionsQuery, arsQuery]);
