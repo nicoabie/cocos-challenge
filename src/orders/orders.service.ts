@@ -199,42 +199,6 @@ export class OrdersService {
         return order;
       }
     });
-
-    /*
-    if (type === OrderType.LIMIT) {
-      if (side === OrderSide.BUY) {
-        // 1. verificar que el usuario tiene la cantidad de fondos necesarios computedSize * price. acá tengo que usar la tabla consolidada
-        // 2. si no tiene fondos suficientes es REJECTED
-        // 3. crear un cash_out de cantidad de pesos price 1 y size = computedSize * price
-        // 4. descontarle de la tabla consolidada computedSize * price
-        // 5. crear el row en orders de buy del instrumento con price, computed size en estado new
-      } else {
-        // 1. verificar que tiene la cantidad de acciones para vender
-        // 2. si no las tiene es un REJECTED
-        // 3. como estan ordenes quedan en NEW no va a haber un cash_in de pesos eso va a ser parte del proceso async
-        // 4. tampoco va a haber un update en la tabla consolidada.
-        // 5. se va a crear el row en orders de sell del instrumento con price, computed size en estado new
-      }
-    } else {
-      // tipo market
-
-      // usando el price del market
-
-      if (side === OrderSide.BUY) {
-        // 1. verificar que el usuario tiene la cantidad de fondos necesarios computedSize * price. acá tengo que usar la tabla consolidada
-        // 2. si no tiene fondos suficientes es REJECTED
-        // 3. crear un cash_out de cantidad de pesos price 1 y size = computedSize * price
-        // 4. descontarle de la tabla consolidada computedSize * price
-        // 5. crear el row en orders de buy del instrumento con price, computed size en estado FILLED
-      } else {
-        // 1. verificar que tiene la cantidad de acciones para vender
-        // 2. si no las tiene es un REJECTED
-        // 3. hacer un cash in de pesos en la tabla ordenes por el monto de la venta
-        // 4. aumentar esa cantidad en la tabla consolidad.
-        // 5. se va a crear el row en orders de sell del instrumento con price, computed size en estado FILLED
-      }
-    }
-    */
   }
 
   async cancelOrder(orderId: number): Promise<Order> {

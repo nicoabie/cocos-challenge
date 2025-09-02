@@ -1,4 +1,4 @@
-# Orders API Documentation
+# API Documentation
 
 ## Enviar una orden al mercado
 
@@ -91,11 +91,11 @@ curl -X POST http://localhost:3000/orders \
   }'
 ```
 
-#### PATCH /orders/:id/cancel
+#### POST /orders/:id/cancel
 Cancela una orden existente (solo órdenes con estado NEW).
 
 ```bash
-curl -X PATCH http://localhost:3000/orders/123/cancel
+curl -X POST http://localhost:3000/orders/123/cancel
 ```
 
 #### GET /orders/user/:userId
@@ -105,30 +105,33 @@ Obtiene todas las órdenes de un usuario específico.
 curl -X GET http://localhost:3000/orders/user/1
 ```
 
-### Estados de las órdenes
+#### GET /users/:id/portfolio
+Obtiene el portfolio completo de un usuario con posiciones actuales y valor total.
 
-- **NEW**: Orden límite enviada al mercado
-- **FILLED**: Orden ejecutada (órdenes MARKET se ejecutan inmediatamente)
-- **REJECTED**: Orden rechazada por no cumplir requisitos (fondos/acciones insuficientes)
-- **CANCELLED**: Orden cancelada por el usuario
+```bash
+curl -X GET http://localhost:3000/users/1/portfolio
+```
 
-### Validaciones implementadas
-
-1. **Órdenes de compra**: Valida que el usuario tenga pesos suficientes
-2. **Órdenes de venta**: Valida que el usuario tenga acciones suficientes
-3. **Órdenes MARKET**: Se ejecutan inmediatamente al precio de mercado actual
-4. **Órdenes LIMIT**: Requieren precio y quedan pendientes hasta cancelación
-5. **Cálculo automático**: Si se proporciona `totalAmount` en lugar de `size`, se calcula automáticamente la cantidad máxima de acciones
-
-### Funcionalidad de transferencias
-
-El sistema también soporta transferencias de efectivo usando los tipos:
-- **CASH_IN**: Ingreso de dinero
-- **CASH_OUT**: Egreso de dinero
-
-### Notas técnicas
-
-- Los precios se obtienen de la tabla `marketdata` (columna `close`)
-- El balance se calcula en base a todas las órdenes FILLED del usuario
-- Las órdenes solo se pueden cancelar si están en estado NEW
-- No se admiten fracciones de acciones
+**Respuesta:**
+```json
+{
+  "totalValue": 150000.50,
+  "availableCash": 25000.00,
+  "positions": [
+    {
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "quantity": 100,
+      "totalValue": 15000.00,
+      "performance": 5.2
+    },
+    {
+      "ticker": "GOOGL",
+      "name": "Alphabet Inc.",
+      "quantity": 50,
+      "totalValue": 110000.50,
+      "performance": -2.1
+    }
+  ]
+}
+```
