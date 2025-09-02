@@ -556,7 +556,7 @@ describe('Orders (e2e)', () => {
           .expect(400);
       });
 
-      it('should return 400 when trying to buy or sell ARS', async () => {
+      it('should return 400 when trying to buy or sell ARS (not cash operations)', async () => {
         const createOrderDto = {
           userId: testUserId,
           instrumentId: testArsId,
@@ -569,6 +569,63 @@ describe('Orders (e2e)', () => {
           .post('/orders')
           .send(createOrderDto)
           .expect(400);
+      });
+
+      it('should allow CASH_IN orders for ARS', async () => {
+        const createOrderDto = {
+          userId: testUserId,
+          instrumentId: testArsId,
+          size: 1000,
+          price: 1,
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_IN,
+        };
+
+        const response = await request(app.getHttpServer())
+          .post('/orders')
+          .send(createOrderDto);
+
+        if (response.status !== 201) {
+          console.log('CASH_IN error:', response.status, response.body);
+        }
+
+        expect(response.status).toBe(201);
+
+        expect(response.body).toMatchObject({
+          userId: testUserId,
+          instrumentId: testArsId,
+          size: 1000,
+          price: 1,
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_IN,
+          status: OrderStatus.FILLED,
+        });
+      });
+
+      it('should allow CASH_OUT orders for ARS', async () => {
+        const createOrderDto = {
+          userId: testUserId,
+          instrumentId: testArsId,
+          size: 500,
+          price: 1,
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_OUT,
+        };
+
+        const response = await request(app.getHttpServer())
+          .post('/orders')
+          .send(createOrderDto)
+          .expect(201);
+
+        expect(response.body).toMatchObject({
+          userId: testUserId,
+          instrumentId: testArsId,
+          size: 500,
+          price: 1,
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_OUT,
+          status: OrderStatus.FILLED,
+        });
       });
 
       it('should return 404 when user does not exist', async () => {

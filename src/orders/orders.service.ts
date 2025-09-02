@@ -57,12 +57,6 @@ export class OrdersService {
       throw new BadRequestException('Size or total amount needed');
     }
 
-    const instrumentPrice = await this.getInstrumentPrice(
-      instrumentId,
-      type,
-      userDefinedPrice,
-    );
-
     const arsIinstrument = await this.instrumentRepository.findOne({
       where: { ticker: 'ARS' },
     });
@@ -70,10 +64,28 @@ export class OrdersService {
       throw new NotFoundException(`ARS Instrument not found`);
     }
 
+    let instrumentPrice: number;
+
     if (arsIinstrument.id === instrument.id) {
-      // esto no estaba literal en el enunciado pero tiene sentido dada la consigna
-      // solo se compran y venden acciones
-      throw new BadRequestException('Cannot buy or sell ARS');
+      // Allow CASH_IN and CASH_OUT operations for ARS with MARKET orders
+      if (
+        type === OrderType.MARKET &&
+        (side === OrderSide.CASH_IN || side === OrderSide.CASH_OUT)
+      ) {
+        // This is allowed - internal cash movement, ARS always has price of 1
+        instrumentPrice = 1;
+      } else {
+        // esto no estaba literal en el enunciado pero tiene sentido dada la consigna
+        // solo se compran y venden acciones
+        throw new BadRequestException('Cannot buy or sell ARS');
+      }
+    } else {
+      // For non-ARS instruments, get price normally
+      instrumentPrice = await this.getInstrumentPrice(
+        instrumentId,
+        type,
+        userDefinedPrice,
+      );
     }
 
     const computedSize =
