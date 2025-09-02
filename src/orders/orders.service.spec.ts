@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { OrdersService } from './orders.service';
 import { Order, OrderSide, OrderStatus, OrderType } from './order.entity';
 import { User } from '../users/user.entity';
 import { Instrument } from '../instruments/instrument.entity';
 import { MarketData } from '../marketdata/marketdata.entity';
+import { Balance } from '../balances/balance.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 
 describe('OrdersService', () => {
@@ -30,10 +32,27 @@ describe('OrdersService', () => {
     findOne: jest.fn(),
   };
 
+  const mockBalancesRepository = {
+    findOne: jest.fn(),
+  };
+
+  const mockManager = {
+    getRepository: jest.fn(),
+    query: jest.fn(),
+  };
+
+  const mockDataSource = {
+    transaction: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
+        {
+          provide: DataSource,
+          useValue: mockDataSource,
+        },
         {
           provide: getRepositoryToken(Order),
           useValue: mockOrderRepository,
@@ -50,10 +69,18 @@ describe('OrdersService', () => {
           provide: getRepositoryToken(MarketData),
           useValue: mockMarketDataRepository,
         },
+        {
+          provide: getRepositoryToken(Balance),
+          useValue: mockBalancesRepository,
+        },
       ],
     }).compile();
 
     service = module.get<OrdersService>(OrdersService);
+
+    mockManager.getRepository.mockReturnValue(mockOrderRepository);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
+    mockDataSource.transaction.mockImplementation((cb) => cb(mockManager));
   });
 
   afterEach(() => {
@@ -61,7 +88,86 @@ describe('OrdersService', () => {
   });
 
   describe('createOrder', () => {
-    describe('Market Orders', () => {
+    describe('Validation', () => {
+      it('should throw error when neither size nor totalAmount is provided', async () => {
+        const createOrderDto: CreateOrderDto = {
+          userId: 1,
+          instrumentId: 1,
+          type: OrderType.MARKET,
+          side: OrderSide.BUY,
+        };
+
+        const mockUser = { id: 1, email: 'test@test.com' };
+        const mockInstrument = { id: 1, ticker: 'AAPL', name: 'Apple Inc.' };
+
+        mockUserRepository.findOne.mockResolvedValue(mockUser);
+        mockInstrumentRepository.findOne.mockResolvedValue(mockInstrument);
+
+        await expect(service.createOrder(createOrderDto)).rejects.toThrow(
+          BadRequestException,
+        );
+      });
+
+      it('should throw error when trying to buy or sell ARS', async () => {
+        const createOrderDto: CreateOrderDto = {
+          userId: 1,
+          instrumentId: 66,
+          size: 100,
+          type: OrderType.MARKET,
+          side: OrderSide.BUY,
+        };
+
+        const mockUser = { id: 1, email: 'test@test.com' };
+        const mockArsInstrument = { id: 66, ticker: 'ARS' };
+
+        mockUserRepository.findOne.mockResolvedValue(mockUser);
+        mockInstrumentRepository.findOne
+          .mockResolvedValueOnce(mockArsInstrument)
+          .mockResolvedValueOnce(mockArsInstrument);
+
+        await expect(service.createOrder(createOrderDto)).rejects.toThrow(
+          BadRequestException,
+        );
+      });
+
+      it('should throw error when user does not exist', async () => {
+        const createOrderDto: CreateOrderDto = {
+          userId: 999,
+          instrumentId: 1,
+          size: 10,
+          type: OrderType.MARKET,
+          side: OrderSide.BUY,
+        };
+
+        mockUserRepository.findOne.mockResolvedValue(null);
+
+        await expect(service.createOrder(createOrderDto)).rejects.toThrow(
+          NotFoundException,
+        );
+      });
+
+      it('should throw error when instrument does not exist', async () => {
+        const createOrderDto: CreateOrderDto = {
+          userId: 1,
+          instrumentId: 999,
+          size: 10,
+          type: OrderType.LIMIT,
+          side: OrderSide.BUY,
+          price: 100,
+        };
+
+        const mockUser = { id: 1, email: 'test@test.com' };
+
+        mockUserRepository.findOne.mockResolvedValue(mockUser);
+        mockInstrumentRepository.findOne.mockResolvedValue(null);
+
+        await expect(service.createOrder(createOrderDto)).rejects.toThrow(
+          NotFoundException,
+        );
+      });
+    });
+
+    describe('Market Orders - BUY', () => {
       it('should create a MARKET BUY order successfully', async () => {
         const createOrderDto: CreateOrderDto = {
           userId: 1,
@@ -82,45 +188,46 @@ describe('OrdersService', () => {
           name: 'Apple Inc.',
           type: 'ACCIONES',
         };
-        const mockMarketData = { close: 150.0 };
-        const mockCashInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
-        const mockOrders = [
-          {
-            side: OrderSide.CASH_IN,
-            size: 100000,
-            price: 1,
-            status: OrderStatus.FILLED,
-          },
-        ];
+        const mockMarketData = { previousClose: 150.0 };
+        const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
 
         mockUserRepository.findOne.mockResolvedValue(mockUser);
         mockInstrumentRepository.findOne
           .mockResolvedValueOnce(mockInstrument)
-          .mockResolvedValueOnce(mockCashInstrument);
+          .mockResolvedValueOnce(mockArsInstrument);
         mockMarketDataRepository.findOne.mockResolvedValue(mockMarketData);
-        mockOrderRepository.find.mockResolvedValue(mockOrders);
-        mockOrderRepository.create.mockReturnValue({
-          ...createOrderDto,
-          price: 150.0,
-          status: OrderStatus.FILLED,
-          datetime: new Date(),
-        });
-        mockOrderRepository.save.mockResolvedValue({
-          id: 1,
-          ...createOrderDto,
-          price: 150.0,
-          status: OrderStatus.FILLED,
-          datetime: new Date(),
-        });
+        mockManager.query
+          .mockResolvedValueOnce([{ available: '100000' }])
+          .mockResolvedValueOnce([]);
+        mockOrderRepository.save
+          .mockResolvedValueOnce({
+            id: 1,
+            userId: 1,
+            instrumentId: 1,
+            price: 150.0,
+            size: 10,
+            side: OrderSide.BUY,
+            status: OrderStatus.FILLED,
+            type: OrderType.MARKET,
+          })
+          .mockResolvedValueOnce({
+            userId: 1,
+            instrumentId: 66,
+            price: 1,
+            size: 1500,
+            side: OrderSide.CASH_OUT,
+            status: OrderStatus.FILLED,
+            type: OrderType.MARKET,
+          });
 
         const result = await service.createOrder(createOrderDto);
 
         expect(result.status).toBe(OrderStatus.FILLED);
         expect(result.price).toBe(150.0);
-        expect(mockOrderRepository.save).toHaveBeenCalled();
+        expect(mockOrderRepository.save).toHaveBeenCalledTimes(2);
       });
 
-      it('should reject a MARKET order when user has insufficient funds', async () => {
+      it('should reject a MARKET BUY order when user has insufficient funds', async () => {
         const createOrderDto: CreateOrderDto = {
           userId: 1,
           instrumentId: 1,
@@ -140,41 +247,38 @@ describe('OrdersService', () => {
           name: 'Apple Inc.',
           type: 'ACCIONES',
         };
-        const mockMarketData = { close: 150.0 };
-        const mockCashInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
-        const mockOrders = [
-          {
-            side: OrderSide.CASH_IN,
-            size: 1000,
-            price: 1,
-            status: OrderStatus.FILLED,
-          },
-        ];
+        const mockMarketData = { previousClose: 150.0 };
+        const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
 
         mockUserRepository.findOne.mockResolvedValue(mockUser);
         mockInstrumentRepository.findOne
           .mockResolvedValueOnce(mockInstrument)
-          .mockResolvedValueOnce(mockCashInstrument);
+          .mockResolvedValueOnce(mockArsInstrument);
         mockMarketDataRepository.findOne.mockResolvedValue(mockMarketData);
-        mockOrderRepository.find.mockResolvedValue(mockOrders);
-        mockOrderRepository.create.mockReturnValue({
-          ...createOrderDto,
-          price: 150.0,
-          status: OrderStatus.REJECTED,
-          datetime: new Date(),
-        });
+        mockManager.query.mockResolvedValueOnce([{ available: '1000' }]);
         mockOrderRepository.save.mockResolvedValue({
           id: 1,
-          ...createOrderDto,
+          userId: 1,
+          instrumentId: 1,
           price: 150.0,
+          size: 1000,
+          side: OrderSide.BUY,
           status: OrderStatus.REJECTED,
-          datetime: new Date(),
+          type: OrderType.MARKET,
         });
 
         const result = await service.createOrder(createOrderDto);
 
         expect(result.status).toBe(OrderStatus.REJECTED);
-        expect(mockOrderRepository.save).toHaveBeenCalled();
+        expect(mockOrderRepository.save).toHaveBeenCalledWith({
+          userId: 1,
+          instrumentId: 1,
+          side: OrderSide.BUY,
+          size: 1000,
+          price: 150.0,
+          type: OrderType.MARKET,
+          status: OrderStatus.REJECTED,
+        });
       });
 
       it('should throw error when no market data is available', async () => {
@@ -197,9 +301,12 @@ describe('OrdersService', () => {
           name: 'Apple Inc.',
           type: 'ACCIONES',
         };
+        const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
 
         mockUserRepository.findOne.mockResolvedValue(mockUser);
-        mockInstrumentRepository.findOne.mockResolvedValue(mockInstrument);
+        mockInstrumentRepository.findOne
+          .mockResolvedValueOnce(mockInstrument)
+          .mockResolvedValueOnce(mockArsInstrument);
         mockMarketDataRepository.findOne.mockResolvedValue(null);
 
         await expect(service.createOrder(createOrderDto)).rejects.toThrow(
@@ -208,8 +315,114 @@ describe('OrdersService', () => {
       });
     });
 
-    describe('Limit Orders', () => {
-      it('should create a LIMIT order with NEW status', async () => {
+    describe('Market Orders - SELL', () => {
+      it('should create a MARKET SELL order successfully', async () => {
+        const createOrderDto: CreateOrderDto = {
+          userId: 1,
+          instrumentId: 1,
+          size: 10,
+          type: OrderType.MARKET,
+          side: OrderSide.SELL,
+        };
+
+        const mockUser = {
+          id: 1,
+          email: 'test@test.com',
+          accountNumber: '10001',
+        };
+        const mockInstrument = {
+          id: 1,
+          ticker: 'AAPL',
+          name: 'Apple Inc.',
+          type: 'ACCIONES',
+        };
+        const mockMarketData = { previousClose: 150.0 };
+        const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
+
+        mockUserRepository.findOne.mockResolvedValue(mockUser);
+        mockInstrumentRepository.findOne
+          .mockResolvedValueOnce(mockInstrument)
+          .mockResolvedValueOnce(mockArsInstrument);
+        mockMarketDataRepository.findOne.mockResolvedValue(mockMarketData);
+        mockManager.query
+          .mockResolvedValueOnce([{ available: '50' }])
+          .mockResolvedValueOnce([]);
+        mockOrderRepository.save
+          .mockResolvedValueOnce({
+            id: 1,
+            userId: 1,
+            instrumentId: 1,
+            price: 150.0,
+            size: 10,
+            side: OrderSide.SELL,
+            status: OrderStatus.FILLED,
+            type: OrderType.MARKET,
+          })
+          .mockResolvedValueOnce({
+            userId: 1,
+            instrumentId: 66,
+            price: 1,
+            size: 1500,
+            side: OrderSide.CASH_IN,
+            status: OrderStatus.FILLED,
+            type: OrderType.MARKET,
+          });
+
+        const result = await service.createOrder(createOrderDto);
+
+        expect(result.status).toBe(OrderStatus.FILLED);
+        expect(result.price).toBe(150.0);
+        expect(mockOrderRepository.save).toHaveBeenCalledTimes(2);
+      });
+
+      it('should reject a MARKET SELL order when user has insufficient shares', async () => {
+        const createOrderDto: CreateOrderDto = {
+          userId: 1,
+          instrumentId: 1,
+          size: 100,
+          type: OrderType.MARKET,
+          side: OrderSide.SELL,
+        };
+
+        const mockUser = {
+          id: 1,
+          email: 'test@test.com',
+          accountNumber: '10001',
+        };
+        const mockInstrument = {
+          id: 1,
+          ticker: 'AAPL',
+          name: 'Apple Inc.',
+          type: 'ACCIONES',
+        };
+        const mockMarketData = { previousClose: 150.0 };
+        const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
+
+        mockUserRepository.findOne.mockResolvedValue(mockUser);
+        mockInstrumentRepository.findOne
+          .mockResolvedValueOnce(mockInstrument)
+          .mockResolvedValueOnce(mockArsInstrument);
+        mockMarketDataRepository.findOne.mockResolvedValue(mockMarketData);
+        mockManager.query.mockResolvedValueOnce([{ available: '10' }]);
+        mockOrderRepository.save.mockResolvedValue({
+          id: 1,
+          userId: 1,
+          instrumentId: 1,
+          price: 150.0,
+          size: 100,
+          side: OrderSide.SELL,
+          status: OrderStatus.REJECTED,
+          type: OrderType.MARKET,
+        });
+
+        const result = await service.createOrder(createOrderDto);
+
+        expect(result.status).toBe(OrderStatus.REJECTED);
+      });
+    });
+
+    describe('Limit Orders - BUY', () => {
+      it('should create a LIMIT BUY order with NEW status', async () => {
         const createOrderDto: CreateOrderDto = {
           userId: 1,
           instrumentId: 1,
@@ -230,38 +443,43 @@ describe('OrdersService', () => {
           name: 'Apple Inc.',
           type: 'ACCIONES',
         };
-        const mockCashInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
-        const mockOrders = [
-          {
-            side: OrderSide.CASH_IN,
-            size: 100000,
-            price: 1,
-            status: OrderStatus.FILLED,
-          },
-        ];
+        const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
 
         mockUserRepository.findOne.mockResolvedValue(mockUser);
         mockInstrumentRepository.findOne
           .mockResolvedValueOnce(mockInstrument)
-          .mockResolvedValueOnce(mockCashInstrument);
-        mockOrderRepository.find.mockResolvedValue(mockOrders);
-        mockOrderRepository.create.mockReturnValue({
-          ...createOrderDto,
-          status: OrderStatus.NEW,
-          datetime: new Date(),
-        });
-        mockOrderRepository.save.mockResolvedValue({
-          id: 1,
-          ...createOrderDto,
-          status: OrderStatus.NEW,
-          datetime: new Date(),
-        });
+          .mockResolvedValueOnce(mockArsInstrument);
+        mockManager.query
+          .mockResolvedValueOnce([{ available: '100000' }])
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([]);
+        mockOrderRepository.save
+          .mockResolvedValueOnce({
+            id: 1,
+            userId: 1,
+            instrumentId: 1,
+            price: 145.0,
+            size: 10,
+            side: OrderSide.BUY,
+            status: OrderStatus.NEW,
+            type: OrderType.LIMIT,
+          })
+          .mockResolvedValueOnce({
+            userId: 1,
+            instrumentId: 66,
+            price: 1,
+            size: 1450,
+            side: OrderSide.CASH_OUT,
+            status: OrderStatus.NEW,
+            type: OrderType.LIMIT,
+          });
 
         const result = await service.createOrder(createOrderDto);
 
         expect(result.status).toBe(OrderStatus.NEW);
         expect(result.price).toBe(145.0);
-        expect(mockOrderRepository.save).toHaveBeenCalled();
+        expect(mockOrderRepository.save).toHaveBeenCalledTimes(2);
+        expect(mockManager.query).toHaveBeenCalledTimes(3);
       });
 
       it('should throw error when price is not provided for LIMIT order', async () => {
@@ -284,13 +502,64 @@ describe('OrdersService', () => {
           name: 'Apple Inc.',
           type: 'ACCIONES',
         };
+        const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
 
         mockUserRepository.findOne.mockResolvedValue(mockUser);
-        mockInstrumentRepository.findOne.mockResolvedValue(mockInstrument);
+        mockInstrumentRepository.findOne
+          .mockResolvedValueOnce(mockInstrument)
+          .mockResolvedValueOnce(mockArsInstrument);
 
         await expect(service.createOrder(createOrderDto)).rejects.toThrow(
           BadRequestException,
         );
+      });
+    });
+
+    describe('Limit Orders - SELL', () => {
+      it('should create a LIMIT SELL order with NEW status', async () => {
+        const createOrderDto: CreateOrderDto = {
+          userId: 1,
+          instrumentId: 1,
+          size: 10,
+          price: 155.0,
+          type: OrderType.LIMIT,
+          side: OrderSide.SELL,
+        };
+
+        const mockUser = {
+          id: 1,
+          email: 'test@test.com',
+          accountNumber: '10001',
+        };
+        const mockInstrument = {
+          id: 1,
+          ticker: 'AAPL',
+          name: 'Apple Inc.',
+          type: 'ACCIONES',
+        };
+        const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
+
+        mockUserRepository.findOne.mockResolvedValue(mockUser);
+        mockInstrumentRepository.findOne
+          .mockResolvedValueOnce(mockInstrument)
+          .mockResolvedValueOnce(mockArsInstrument);
+        mockManager.query.mockResolvedValueOnce([{ available: '50' }]);
+        mockOrderRepository.save.mockResolvedValue({
+          id: 1,
+          userId: 1,
+          instrumentId: 1,
+          price: 155.0,
+          size: 10,
+          side: OrderSide.SELL,
+          status: OrderStatus.NEW,
+          type: OrderType.LIMIT,
+        });
+
+        const result = await service.createOrder(createOrderDto);
+
+        expect(result.status).toBe(OrderStatus.NEW);
+        expect(result.price).toBe(155.0);
+        expect(mockOrderRepository.save).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -315,49 +584,101 @@ describe('OrdersService', () => {
           name: 'Apple Inc.',
           type: 'ACCIONES',
         };
-        const mockMarketData = { close: 150.0 };
-        const mockCashInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
-        const mockOrders = [
-          {
-            side: OrderSide.CASH_IN,
-            size: 100000,
-            price: 1,
-            status: OrderStatus.FILLED,
-          },
-        ];
+        const mockMarketData = { previousClose: 150.0 };
+        const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
 
         mockUserRepository.findOne.mockResolvedValue(mockUser);
         mockInstrumentRepository.findOne
           .mockResolvedValueOnce(mockInstrument)
-          .mockResolvedValueOnce(mockCashInstrument);
+          .mockResolvedValueOnce(mockArsInstrument);
         mockMarketDataRepository.findOne.mockResolvedValue(mockMarketData);
-        mockOrderRepository.find.mockResolvedValue(mockOrders);
-        mockOrderRepository.create.mockReturnValue({
-          userId: 1,
-          instrumentId: 1,
-          size: 100,
-          price: 150.0,
-          type: OrderType.MARKET,
-          side: OrderSide.BUY,
-          status: OrderStatus.FILLED,
-          datetime: new Date(),
-        });
-        mockOrderRepository.save.mockResolvedValue({
-          id: 1,
-          userId: 1,
-          instrumentId: 1,
-          size: 100,
-          price: 150.0,
-          type: OrderType.MARKET,
-          side: OrderSide.BUY,
-          status: OrderStatus.FILLED,
-          datetime: new Date(),
-        });
+        mockManager.query
+          .mockResolvedValueOnce([{ available: '100000' }])
+          .mockResolvedValueOnce([]);
+        mockOrderRepository.save
+          .mockResolvedValueOnce({
+            id: 1,
+            userId: 1,
+            instrumentId: 1,
+            size: 100,
+            price: 150.0,
+            type: OrderType.MARKET,
+            side: OrderSide.BUY,
+            status: OrderStatus.FILLED,
+            datetime: new Date(),
+          })
+          .mockResolvedValueOnce({
+            userId: 1,
+            instrumentId: 66,
+            price: 1,
+            size: 15000,
+            side: OrderSide.CASH_OUT,
+            status: OrderStatus.FILLED,
+            type: OrderType.MARKET,
+          });
 
         const result = await service.createOrder(createOrderDto);
 
         expect(result.size).toBe(100);
-        expect(mockOrderRepository.save).toHaveBeenCalled();
+        expect(mockOrderRepository.save).toHaveBeenCalledTimes(2);
+      });
+
+      it('should calculate size from totalAmount for LIMIT orders', async () => {
+        const createOrderDto: CreateOrderDto = {
+          userId: 1,
+          instrumentId: 1,
+          totalAmount: 14500,
+          price: 145.0,
+          type: OrderType.LIMIT,
+          side: OrderSide.BUY,
+        };
+
+        const mockUser = {
+          id: 1,
+          email: 'test@test.com',
+          accountNumber: '10001',
+        };
+        const mockInstrument = {
+          id: 1,
+          ticker: 'AAPL',
+          name: 'Apple Inc.',
+          type: 'ACCIONES',
+        };
+        const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
+
+        mockUserRepository.findOne.mockResolvedValue(mockUser);
+        mockInstrumentRepository.findOne
+          .mockResolvedValueOnce(mockInstrument)
+          .mockResolvedValueOnce(mockArsInstrument);
+        mockManager.query
+          .mockResolvedValueOnce([{ available: '100000' }])
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([]);
+        mockOrderRepository.save
+          .mockResolvedValueOnce({
+            id: 1,
+            userId: 1,
+            instrumentId: 1,
+            size: 100,
+            price: 145.0,
+            type: OrderType.LIMIT,
+            side: OrderSide.BUY,
+            status: OrderStatus.NEW,
+          })
+          .mockResolvedValueOnce({
+            userId: 1,
+            instrumentId: 66,
+            price: 1,
+            size: 14500,
+            side: OrderSide.CASH_OUT,
+            status: OrderStatus.NEW,
+            type: OrderType.LIMIT,
+          });
+
+        const result = await service.createOrder(createOrderDto);
+
+        expect(result.size).toBe(100);
+        expect(result.price).toBe(145.0);
       });
     });
   });

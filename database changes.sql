@@ -194,6 +194,7 @@ GROUP BY o.userId, o.instrumentId;
 -- NOTA3: No debería haber perdido tanto tiempo jugando con clickhouse y el CDC de debezium pero me daba curiosidad ver cómo se integrarían.
 -- El docker-compose levanta lo servicios necesarios para empezar a jugar con eso.
 
+-- para conectar a postgres con debezium y empezar a escuchar los cambios en la db:
 -- curl -i -X POST -H "Accept:application/json" -H  "Content-Type:application/json" http://localhost:8083/connectors/ -d @register-postgres.json
 
 -- Asumo que en la tabla order el precio es por unidad, dado los ejemplos de CASH_IN y CASH_OUT de moneda ARS 

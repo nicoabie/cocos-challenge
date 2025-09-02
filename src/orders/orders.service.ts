@@ -10,7 +10,7 @@ import { User } from '../users/user.entity';
 import { Instrument } from '../instruments/instrument.entity';
 import { MarketData } from '../marketdata/marketdata.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { Balance } from 'src/balances/balance.entity';
+import { Balance } from '../balances/balance.entity';
 
 @Injectable()
 export class OrdersService {
