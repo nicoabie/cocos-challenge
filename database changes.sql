@@ -1,3 +1,6 @@
+-- market data
+--------------
+
 -- este indice es para que sea más sencillo encontrar el ultimo close de cada instrumento para calcular el rendimiento
 -- también se podría matarializar esto en una vista (si vamos a hacer los calculos en la DB) o en un redis si vamos a hacer 
 -- los calculos en la APP y tiene más sentido mantener eso para otros calculos o bien para mostrarle al usuario esos datos o bien 
@@ -27,6 +30,29 @@ CREATE TABLE marketdata (
   date DATE NOT NULL, -- importante saber a qué día corresponde, no puede ser null
   FOREIGN KEY (instrumentId) REFERENCES instruments(id)
 );
+
+-- instruments 
+--------------
+
+-- el problema con esta tabla es usar varchar de 10 como tipo de dato para la columna type que es un enum ACCION | MONEDA
+-- el ticker de 10 y el name de 255 puede estar bien pero ambos deberían ser not null
+
+-- una decinición más acertada sería la siguiente, esto nos asegura que siempre la tabla va a contener valores con sentido.
+CREATE TABLE instruments (
+  id SERIAL PRIMARY KEY,
+  ticker VARCHAR(10) NOT NULL,
+  name VARCHAR(255) NOT NULL ,
+  type VARCHAR(10) CHECK (type IN ('ACCION', 'MONEDA')) NOT NULL
+);
+
+-- acá la verdad es que no son muchos activos y los campos de nombre y ticker
+-- no son ni largos ni el tipo de busquedas van a ser muy complejas
+
+-- no veo que tenga sentido agregar un indice para soportar full text search
+-- https://www.postgresql.org/docs/current/textsearch-indexes.html
+
+-- habría que ver métricas de cuantas búsquedas se hacen de activos, lo cierto es que hasta se podrían cachear dado que no cambian
+-- mismo en el proceso de backend dado que no son muchos o en un redis si ya se tuviese alguno (si por alguna razón no se quisiera mantener estado en el proceso de backend)
 
 
 
