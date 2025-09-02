@@ -7,14 +7,14 @@ import {
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './user.entity';
-import { PortfolioService } from '../portfolio/portfolio.service';
-import { PortfolioDto } from '../portfolio/dto/portfolio.dto';
+import { BalancesService } from '../balances/balances.service';
+import { PortfolioDto } from '../balances/dto/portfolio.dto';
 
 @Controller('users')
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly portfolioService: PortfolioService,
+    private readonly balancesService: BalancesService,
   ) {}
 
   @Get()
@@ -61,6 +61,6 @@ export class UsersController {
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
-    return this.portfolioService.getPortfolio(id);
+    return this.balancesService.getPortfolio(id);
   }
 }

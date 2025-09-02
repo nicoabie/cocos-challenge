@@ -25,9 +25,8 @@ export class OrdersService {
   ) {}
 
   async createOrder(createOrderDto: CreateOrderDto): Promise<Order> {
-    const { userId, instrumentId, type, side, price, totalAmount } =
+    const { userId, instrumentId, type, side, size, price, totalAmount } =
       createOrderDto;
-    let { size } = createOrderDto;
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
@@ -43,27 +42,60 @@ export class OrdersService {
       );
     }
 
-    let orderPrice: number;
+    if (!size && !totalAmount) {
+      throw new BadRequestException('Size or total amount needed');
+    }
 
-    if (type === OrderType.MARKET) {
-      const marketData = await this.getLatestMarketData(instrumentId);
-      if (!marketData) {
-        throw new BadRequestException(
-          `No market data available for instrument ${instrumentId}`,
-        );
-      }
-      orderPrice = Number(marketData.close);
-    } else if (type === OrderType.LIMIT) {
+    if (type === OrderType.LIMIT) {
       if (!price) {
         throw new BadRequestException('Price is required for LIMIT orders');
       }
-      orderPrice = price;
+
+      const computedSize =
+        // tengo que castear a number porque ts no entiende que size es undefined totalAmount no puede serlo.
+        size ?? Math.floor((totalAmount as number) / price);
+
+      if (side === OrderSide.BUY) {
+        // 1. verificar que el usuario tiene la cantidad de fondos necesarios computedSize * price. acá tengo que usar la tabla consolidada
+        // 2. si no tiene fondos suficientes es REJECTED
+        // 3. crear un cash_out de cantidad de pesos price 1 y size = computedSize * price
+        // 4. descontarle de la tabla consolidada computedSize * price
+        // 5. crear el row en orders de buy del instrumento con price, computed size en estado new
+      } else {
+        // 1. verificar que tiene la cantidad de acciones para vender
+        // 2. si no las tiene es un REJECTED
+        // 3. como estan ordenes quedan en NEW no va a haber un cash_in de pesos eso va a ser parte del proceso async
+        // 4. tampoco va a haber un update en la tabla consolidada.
+        // 5. se va a crear el row en orders de sell del instrumento con price, computed size en estado new
+      }
     } else {
-      throw new BadRequestException('Invalid order type');
+      // tipo market
+
+      // usando el price del market
+
+      if (side === OrderSide.BUY) {
+        // 1. verificar que el usuario tiene la cantidad de fondos necesarios computedSize * price. acá tengo que usar la tabla consolidada
+        // 2. si no tiene fondos suficientes es REJECTED
+        // 3. crear un cash_out de cantidad de pesos price 1 y size = computedSize * price
+        // 4. descontarle de la tabla consolidada computedSize * price
+        // 5. crear el row en orders de buy del instrumento con price, computed size en estado FILLED
+      } else {
+        // 1. verificar que tiene la cantidad de acciones para vender
+        // 2. si no las tiene es un REJECTED
+        // 3. hacer un cash in de pesos en la tabla ordenes por el monto de la venta
+        // 4. aumentar esa cantidad en la tabla consolidad.
+        // 5. se va a crear el row en orders de sell del instrumento con price, computed size en estado FILLED
+      }
     }
 
+    const instrumentPrice = await this.getInstrumentPrice(
+      instrumentId,
+      type,
+      price,
+    );
+
     if (totalAmount && !size) {
-      size = Math.floor(totalAmount / orderPrice);
+      // size = Math.floor(totalAmount / instrumentPrice);
       if (size === 0) {
         throw new BadRequestException(
           'Total amount is too small to buy at least one share',
@@ -75,7 +107,7 @@ export class OrdersService {
       throw new BadRequestException('Order size must be greater than 0');
     }
 
-    const totalCost = size * orderPrice;
+    const totalCost = size * instrumentPrice;
 
     const validation = await this.validateOrder(
       userId,
@@ -90,7 +122,7 @@ export class OrdersService {
         instrumentId,
         side,
         size,
-        price: orderPrice,
+        price: instrumentPrice,
         type,
         status: OrderStatus.REJECTED,
         datetime: new Date(),
@@ -110,7 +142,7 @@ export class OrdersService {
       instrumentId,
       side,
       size,
-      price: orderPrice,
+      price: instrumentPrice,
       type,
       status,
       datetime: new Date(),
@@ -129,6 +161,37 @@ export class OrdersService {
     }
 
     return savedOrder;
+  }
+
+  async getInstrumentPrice(
+    instrumentId: number,
+    type: OrderType,
+    userDefinedPrice: number | undefined,
+  ): Promise<number> {
+    switch (type) {
+      case OrderType.MARKET: {
+        const marketData = await this.getLatestMarketData(instrumentId);
+        if (!marketData) {
+          throw new BadRequestException(
+            `No market data available for instrument ${instrumentId}`,
+          );
+        }
+        return marketData.previousClose;
+      }
+      case OrderType.LIMIT: {
+        if (!userDefinedPrice) {
+          throw new BadRequestException('Price is required for LIMIT orders');
+        }
+        return userDefinedPrice;
+      }
+      default: {
+        // de esta forma si agregásemos un nuevo order type, el typesystem nos daría un error.
+        // para cosas más complejas he utilizado https://github.com/gvergnaud/ts-pattern
+        const exhaustiveCheck: never = type;
+        // este return no se va a ejecutar
+        return exhaustiveCheck;
+      }
+    }
   }
 
   async cancelOrder(orderId: number): Promise<Order> {

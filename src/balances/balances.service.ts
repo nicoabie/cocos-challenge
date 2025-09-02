@@ -3,56 +3,56 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order, OrderSide, OrderStatus } from '../orders/order.entity';
 import { PortfolioDto } from './dto/portfolio.dto';
+import { Balance } from './balance.entity';
 
 const ARS_TICKER = 'ARS';
 
-// cree este portfolio service porque no me pareció buena la forma que tiene typeorm de resolver los custom repositories
+// cree este balances service porque no me pareció buena la forma que tiene typeorm de resolver los custom repositories
 // https://typeorm.io/docs/working-with-entity-manager/custom-repository/#using-custom-repositories-in-transactions
 // donde uno le tiene explicitamente declarar que use el repositorio que uno extendió. `manager.withRepository(UserRepository)`
 
 @Injectable()
-export class PortfolioService {
+export class BalancesService {
   constructor(
     @InjectRepository(Order)
     private ordersRepository: Repository<Order>,
+    @InjectRepository(Balance)
+    private balancesRepository: Repository<Balance>,
   ) {}
 
-  async getAvailableCash(userId: number, ticker: string): Promise<number> {
-    // si bien el resultado de esta query va a ser unico o ninguno dado que estoy buscando un instrumento en específico,
-    // typeorm no tiene un método por lo que vi para hacer queryOne como otros ORMS
+  getUserTickerAvailabilityBaseQuery(userId: number, ticker: string) {
+    return this.balancesRepository
+      .createQueryBuilder('balance')
+      .innerJoin('balance.instrument', 'instrument')
+      .where('balance.userId = :userId', { userId })
+      .andWhere('instrument.ticker = :ticker', { ticker });
+    // por alguna razón no puedo llamar a setLock si no estoy dentro de una transacction.
+    // lo cual no sé si tiene mucho sentido dado que en el motor de base de datos puedo hacer
+    // un select for update sin una y sin problemas.
+    // así que expongo este método para en order service poder llamar a setLock...
+    // .setLock('pessimistic_write')
+  }
 
-    // hablando de ORMS a mí mucho no me convencen y hace un par de años empecé a hacer mi ORM en contra de otros, irónico, no?
-    // https://github.com/agiletiger/ojotas hoy en día si tuviese que interactuar con postgres usaría https://pgtyped.dev/
+  async getUserTickerAvailability(
+    userId: number,
+    ticker: string,
+  ): Promise<number> {
+    const balance = await this.getUserTickerAvailabilityBaseQuery(
+      userId,
+      ticker,
+    )
+      .select()
+      .getOne();
 
-    // también en cierto que net_amount es en realidad del tipo number pero typeorm no sabe esto y lo devuelve como string...
-    const res = await this.ordersRepository.query<{ net_amount: string }[]>(
-      `
-      SELECT
-	      sum(
-	      	CASE
-	      		WHEN side = '${OrderSide.CASH_IN}' THEN size * price
- 	      		ELSE - size * price
-	      	END
-	      ) AS net_amount
-        FROM
-        	orders
-        JOIN instruments on instrumentid = instruments.id
-        WHERE
-        	userid = $1
-        	AND side IN ('${OrderSide.CASH_IN}', '${OrderSide.CASH_OUT}')
-        	AND status = '${OrderStatus.FILLED}'
-        	AND ticker = $2
-        GROUP BY
-        	instruments.id;
-    `,
-      [userId, ticker],
-    );
-
-    return res[0] ? Number(res[0].net_amount) : 0;
+    return !balance ? 0 : balance.quantity - balance.reserved;
   }
 
   async getPortfolio(userId: number): Promise<PortfolioDto> {
-    // mismo pasa con el resultado de esta query, tengo que decirle que son strings para luego saber que tengo que transformarlos con Number
+    // hablando de ORMS a mí mucho no me convencen y hace un par de años empecé a hacer mi ORM en contra de otros, irónico, no?
+    // https://github.com/agiletiger/ojotas hoy en día si tuviese que interactuar con postgres usaría https://pgtyped.dev/
+    // aunque por lo que estuve leyendo typeorm es mejor que sequelize (que padeci bastante) y definitamente mejor que objection (definitivamente el peor que usé)
+
+    // tengo que decirle que son strings para luego saber que tengo que transformarlos con Number porque typeorm los transforma a string, por eso me quejaba arriba :P
     // sino += me va a concatenar los strings :)
     const positionsQuery = this.ordersRepository.query<
       {
@@ -144,7 +144,7 @@ export class PortfolioService {
     // estas dos las puedo hacer de manera concurrente
     const [positions, ars] = await Promise.all([
       positionsQuery,
-      this.getAvailableCash(userId, ARS_TICKER),
+      this.getUserTickerAvailability(userId, ARS_TICKER),
     ]);
 
     const result: PortfolioDto = {

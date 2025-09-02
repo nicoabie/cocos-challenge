@@ -25,7 +25,7 @@ export class MarketData {
   open: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
-  close: number;
+  close: number | null;
 
   @Column({ name: 'previousclose', type: 'decimal', precision: 10, scale: 2 })
   previousClose: number;

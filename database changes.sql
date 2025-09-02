@@ -31,6 +31,9 @@ CREATE TABLE marketdata (
   FOREIGN KEY (instrumentId) REFERENCES instruments(id)
 );
 
+-- algo bastante interesante es que marketdata no tiene el valor actual del instrumento, 
+-- por lo que para los compras se va a utilizar el previousClose que siempre está presente.
+
 -- instruments 
 --------------
 
@@ -55,5 +58,107 @@ CREATE TABLE instruments (
 -- mismo en el proceso de backend dado que no son muchos o en un redis si ya se tuviese alguno (si por alguna razón no se quisiera mantener estado en el proceso de backend)
 
 
+-- orders
+---------
+
+-- la tabla de orders está bien como un registro histórico de lo que fue aconteciendo. 
+-- el problema que tenemos es que no hay un consolidado, de las posiciones de las acciones tanto como de los pesos.
+-- entonces no tenemos forma de asegurar cuando queremos vender un activo que realmente tenemos ese activo o si queremos
+-- comprar un activo que efectivamente tenemos los pesos. La manera de hacer eso es con SELECT FOR UPDATE que va a lockear
+-- la fila durante la transacción y eso va a evitar que algo se deduzca dos veces por ejemplo (si hay más de una transacción en curso)
+
+-- a la tabla de ordenes le podemos agregar un par de checks
+CREATE TABLE orders (
+  id SERIAL PRIMARY KEY,
+  instrumentId INT NOT NULL,
+  userId INT NOT NULL,
+  size INT CHECK (size > 0) NOT NULL,
+  price NUMERIC(10, 2) CHECK (price > 0) NOT NULL,
+  type VARCHAR(10) CHECK (type IN ('MARKET', 'LIMIT')) NOT NULL,
+  side VARCHAR(10) CHECK (type IN ('BULL', 'SELL', 'CASH_IN', 'CASH_OUT')) NOT NULL,
+  status VARCHAR(20) CHECK (type IN ('NEW', 'FILLED', 'REJECTED', 'CANCELLED')) NOT NULL,
+  datetime TIMESTAMP DEFAULT NOW() NOT NULL,
+  FOREIGN KEY (instrumentId) REFERENCES instruments(id),
+  FOREIGN KEY (userId) REFERENCES users(id)
+);
+
+-- ahí quedó más bonita y nos aseguramenos que no acepte valores incorectos. muchas veces se utilizan diversos sistemas con una misma
+-- base de datos, es siempre importante que el modelo de datos proteja de estados no validos. 
+-- en sistemas en los cuales hay muchísimos inserts por segundo se quitan los foreign keys porque están implementados como triggers
+-- y cada vez que se inserta una row el motor de base de datos feacientemente verifica que exista la relación, lo cual lo torna lento.
+-- entonces lo que se hace es asegurarse a nivel de applicación. nada, comentario. ya que estaba charlando un poco de estados validos.
+
+-- bueno, volviendo al consolidado, necesitamos una tabla de balances 
+
+-- tadah!!
+CREATE TABLE balances (
+  userId INT NOT NULL,
+  instrumentId INT NOT NULL, -- incluye acciones y ARS
+  quantity NUMERIC(18,2) CHECK (quantity >= 0) NOT NULL DEFAULT 0,
+  reserved NUMERIC(18,2) CHECK (reserved >= 0) NOT NULL DEFAULT 0, -- saldo bloqueado por órdenes NEW
+  PRIMARY KEY (userId, instrumentId)
+);
+
+-- me pareció buena idea tener un reserved que la sumatoria de todas las órdenes NEW para ese instrumento.
+-- de esta manera te queda siempre que quantity + reserved = FILLED + NEW
+
+-- ahora necesitamos llenarla, con la información de ordernes que tenemos. pero si observamos la tabla de ordenes no está completa
+-- le falta las contra partidas de los BUY y los SALE. todas las operaciones se hacen contra el instrumento pesos entonces
+-- tiene sentido que cuando se hace una compra de una accion haya un cash out de pesos y cuando se haga una venta de una accion 
+-- haya un cash in de pesos. así te queda como un double entry ledger y esto nos va a permitir generar la tabla de balances.
+
+INSERT INTO orders (instrumentId, userId, size, price, side, type, status, datetime)
+SELECT
+	-- instrumento ARS
+	66 AS instrumentId,
+	o.userid,
+	size * price AS size,
+	1 AS price,
+	CASE
+		WHEN o.side = 'BUY' THEN 'CASH_OUT'
+		WHEN o.side = 'SELL' THEN 'CASH_IN'
+	END AS side,
+	type,
+	status,
+	datetime
+FROM
+	orders o
+WHERE
+	o.side IN ('BUY', 'SELL')
+	AND o.status != 'REJECTED';
+
+-- las rejected no generan cash in ni cash out porque fallan inmmediatamente
+-- acá estoy asumiento que las limit, solo puede cancelarlas el usuario y sino quedan ad eternum
+-- esperando que se den las condiciones de mercado para su ejecución.
+
+-- ahora el insert para la posición consolidada de cada instrumento
+
+-- encontré un bug en la data inicial para las ordenes del instrumento 31
+-- el usuario vendió acciones que no tenía realmente ya que el buy está en NEW
+
+-- como soy bueno antes de generar los balances le voy a pasar esa orden a FILLED
+-- así no me arruina mi check de que quantity en balance debe ser >= 0, lo cual tiene mucho sentido.
+
+update orders set status = 'FILLED' where id = 7;
+
+INSERT INTO balances (userId, instrumentId, quantity, reserved)
+SELECT 
+  o.userId,
+  o.instrumentId,
+  SUM(
+    CASE 
+      WHEN o.side IN ('BUY','CASH_IN') AND o.status = 'FILLED' THEN o.size
+      WHEN o.side IN ('SELL', 'CASH_OUT') AND o.status = 'FILLED' THEN -o.size 
+      ELSE 0 
+    END
+  ) AS quantity,
+  SUM(
+    CASE
+      WHEN o.side IN ('SELL','CASH_OUT') AND o.status = 'NEW' THEN o.size
+      ELSE 0
+    END
+  ) AS reserved
+FROM orders o
+GROUP BY o.userId, o.instrumentId;
 
 

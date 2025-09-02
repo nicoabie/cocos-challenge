@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsPositive, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsPositive } from 'class-validator';
 import { OrderSide, OrderType } from '../order.entity';
 
 export class CreateOrderDto {
@@ -17,7 +17,7 @@ export class CreateOrderDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @IsPositive()
   totalAmount?: number;
 
   @IsOptional()
