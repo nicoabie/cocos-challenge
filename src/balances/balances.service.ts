@@ -33,7 +33,7 @@ export class BalancesService {
     // .setLock('pessimistic_write')
   }
 
-  async getUserTickerAvailability(
+  async getUserInstrumentAvailability(
     userId: number,
     ticker: string,
   ): Promise<number> {
@@ -144,7 +144,7 @@ export class BalancesService {
     // estas dos las puedo hacer de manera concurrente
     const [positions, ars] = await Promise.all([
       positionsQuery,
-      this.getUserTickerAvailability(userId, ARS_TICKER),
+      this.getUserInstrumentAvailability(userId, ARS_TICKER),
     ]);
 
     const result: PortfolioDto = {

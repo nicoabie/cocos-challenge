@@ -57,6 +57,11 @@ CREATE TABLE instruments (
 -- habría que ver métricas de cuantas búsquedas se hacen de activos, lo cierto es que hasta se podrían cachear dado que no cambian
 -- mismo en el proceso de backend dado que no son muchos o en un redis si ya se tuviese alguno (si por alguna razón no se quisiera mantener estado en el proceso de backend)
 
+-- pero al menos lo que podemos hacer es crear un indice único por ticker, porque no deberia haber repetidos
+
+ALTER TABLE instruments
+ADD CONSTRAINT instruments_ticker_unique UNIQUE (ticker);
+
 
 -- orders
 ---------
@@ -101,6 +106,7 @@ CREATE TABLE balances (
 
 -- me pareció buena idea tener un reserved que la sumatoria de todas las órdenes NEW para ese instrumento.
 -- de esta manera te queda siempre que quantity + reserved = FILLED + NEW
+-- y evita poder sobre vender acciones o sobre usar pesos para comprar acciones.
 
 -- ahora necesitamos llenarla, con la información de ordernes que tenemos. pero si observamos la tabla de ordenes no está completa
 -- le falta las contra partidas de los BUY y los SALE. todas las operaciones se hacen contra el instrumento pesos entonces
