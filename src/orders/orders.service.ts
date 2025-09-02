@@ -64,12 +64,11 @@ export class OrdersService {
     let instrumentPrice: number;
 
     if (arsIinstrument.id === instrument.id) {
-      // Allow CASH_IN and CASH_OUT operations for ARS with MARKET orders
       if (
         type === OrderType.MARKET &&
         (side === OrderSide.CASH_IN || side === OrderSide.CASH_OUT)
       ) {
-        // This is allowed - internal cash movement, ARS always has price of 1
+        // los ARS siempre tiene precio de 1.
         instrumentPrice = 1;
       } else {
         // esto no estaba literal en el enunciado pero tiene sentido dada la consigna
