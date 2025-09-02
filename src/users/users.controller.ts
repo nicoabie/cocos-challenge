@@ -7,8 +7,8 @@ import {
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './user.entity';
-import { PortfolioService } from './portfolio.service';
-import { PortfolioDto } from './dto/portfolio.dto';
+import { PortfolioService } from '../portfolio/portfolio.service';
+import { PortfolioDto } from '../portfolio/dto/portfolio.dto';
 
 @Controller('users')
 export class UsersController {

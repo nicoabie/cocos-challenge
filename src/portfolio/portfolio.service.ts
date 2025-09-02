@@ -6,6 +6,10 @@ import { PortfolioDto } from './dto/portfolio.dto';
 
 const ARS_TICKER = 'ARS';
 
+// cree este portfolio service porque no me pareció buena la forma que tiene typeorm de resolver los custom repositories
+// https://typeorm.io/docs/working-with-entity-manager/custom-repository/#using-custom-repositories-in-transactions
+// donde uno le tiene explicitamente declarar que use el repositorio que uno extendió. `manager.withRepository(UserRepository)`
+
 @Injectable()
 export class PortfolioService {
   constructor(
@@ -13,7 +17,7 @@ export class PortfolioService {
     private ordersRepository: Repository<Order>,
   ) {}
 
-  async getPortfolio(userId: number): Promise<PortfolioDto> {
+  async getAvailableCash(userId: number, ticker: string): Promise<number> {
     // si bien el resultado de esta query va a ser unico o ninguno dado que estoy buscando un instrumento en específico,
     // typeorm no tiene un método por lo que vi para hacer queryOne como otros ORMS
 
@@ -21,7 +25,7 @@ export class PortfolioService {
     // https://github.com/agiletiger/ojotas hoy en día si tuviese que interactuar con postgres usaría https://pgtyped.dev/
 
     // también en cierto que net_amount es en realidad del tipo number pero typeorm no sabe esto y lo devuelve como string...
-    const arsQuery = this.ordersRepository.query<{ net_amount: string }[]>(
+    const res = await this.ordersRepository.query<{ net_amount: string }[]>(
       `
       SELECT
 	      sum(
@@ -41,9 +45,13 @@ export class PortfolioService {
         GROUP BY
         	instruments.id;
     `,
-      [userId, ARS_TICKER],
+      [userId, ticker],
     );
 
+    return res[0] ? Number(res[0].net_amount) : 0;
+  }
+
+  async getPortfolio(userId: number): Promise<PortfolioDto> {
     // mismo pasa con el resultado de esta query, tengo que decirle que son strings para luego saber que tengo que transformarlos con Number
     // sino += me va a concatenar los strings :)
     const positionsQuery = this.ordersRepository.query<
@@ -134,7 +142,10 @@ export class PortfolioService {
     // he visto muchas veces donde se hace demasiado en el servidor cosas que la base de datos podría resolver. luego está monitorear la base de datos.
 
     // estas dos las puedo hacer de manera concurrente
-    const [positions, ars] = await Promise.all([positionsQuery, arsQuery]);
+    const [positions, ars] = await Promise.all([
+      positionsQuery,
+      this.getAvailableCash(userId, ARS_TICKER),
+    ]);
 
     const result: PortfolioDto = {
       availableCash: 0,
@@ -159,10 +170,8 @@ export class PortfolioService {
       });
     }
 
-    if (ars[0]) {
-      result.availableCash = Number(ars[0].net_amount);
-      result.totalValue += Number(ars[0].net_amount);
-    }
+    result.availableCash = ars;
+    result.totalValue += ars;
 
     return result;
   }
