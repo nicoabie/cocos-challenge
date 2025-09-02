@@ -2,11 +2,12 @@ import {
   Controller,
   Post,
   Get,
-  Patch,
   Body,
   Param,
   ParseIntPipe,
   ValidationPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -23,7 +24,8 @@ export class OrdersController {
     return await this.ordersService.createOrder(createOrderDto);
   }
 
-  @Patch(':id/cancel')
+  @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
   async cancelOrder(@Param('id', ParseIntPipe) id: number): Promise<Order> {
     return await this.ordersService.cancelOrder(id);
   }

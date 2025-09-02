@@ -717,7 +717,7 @@ describe('Orders (e2e)', () => {
       });
     });
 
-    describe('PATCH /orders/:id/cancel', () => {
+    describe('POST /orders/:id/cancel', () => {
       it('should cancel a LIMIT BUY order and rollback reserved balance', async () => {
         // First create a LIMIT BUY order
         const createOrderDto = {
@@ -750,7 +750,7 @@ describe('Orders (e2e)', () => {
 
         // Cancel the order
         const cancelResponse = await request(app.getHttpServer())
-          .patch(`/orders/${orderId}/cancel`)
+          .post(`/orders/${orderId}/cancel`)
           .expect(200);
 
         expect((cancelResponse.body as OrderResponse).status).toBe(
@@ -799,7 +799,7 @@ describe('Orders (e2e)', () => {
 
         // Cancel the order
         const cancelResponse = await request(app.getHttpServer())
-          .patch(`/orders/${orderId}/cancel`)
+          .post(`/orders/${orderId}/cancel`)
           .expect(200);
 
         expect((cancelResponse.body as OrderResponse).status).toBe(
@@ -843,7 +843,7 @@ describe('Orders (e2e)', () => {
 
         // Try to cancel the filled order
         const cancelResponse = await request(app.getHttpServer())
-          .patch(`/orders/${orderId}/cancel`)
+          .post(`/orders/${orderId}/cancel`)
           .expect(400);
 
         expect((cancelResponse.body as ErrorResponse).message).toContain(
@@ -853,7 +853,7 @@ describe('Orders (e2e)', () => {
 
       it('should return 404 when trying to cancel non-existent order', async () => {
         await request(app.getHttpServer())
-          .patch('/orders/99999/cancel')
+          .post('/orders/99999/cancel')
           .expect(404);
       });
     });
