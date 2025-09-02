@@ -7,7 +7,7 @@ import { BalancesService } from '../balances/balances.service';
 import { Order } from '../orders/order.entity';
 import { MarketData } from '../marketdata/marketdata.entity';
 import { Instrument } from '../instruments/instrument.entity';
-import { Balance } from 'src/balances/balance.entity';
+import { Balance } from '../balances/balance.entity';
 
 @Module({
   imports: [

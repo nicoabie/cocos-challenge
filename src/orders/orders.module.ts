@@ -6,7 +6,7 @@ import { Order } from './order.entity';
 import { User } from '../users/user.entity';
 import { Instrument } from '../instruments/instrument.entity';
 import { MarketData } from '../marketdata/marketdata.entity';
-import { Balance } from 'src/balances/balance.entity';
+import { Balance } from '../balances/balance.entity';
 
 @Module({
   imports: [
