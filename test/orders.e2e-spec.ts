@@ -7,6 +7,22 @@ import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { OrderSide, OrderStatus, OrderType } from '../src/orders/order.entity';
 
+interface OrderResponse {
+  id: number;
+  status: OrderStatus;
+  userId: number;
+  instrumentId: number;
+  size: number;
+  price: number;
+  type: OrderType;
+  side: OrderSide;
+}
+
+interface ErrorResponse {
+  message: string;
+  statusCode: number;
+}
+
 describe('Orders (e2e)', () => {
   let app: INestApplication<App>;
   let dataSource: DataSource;
@@ -698,6 +714,147 @@ describe('Orders (e2e)', () => {
         await dataSource.query('DELETE FROM instruments WHERE id = $1', [
           newInstrument.id,
         ]);
+      });
+    });
+
+    describe('PATCH /orders/:id/cancel', () => {
+      it('should cancel a LIMIT BUY order and rollback reserved balance', async () => {
+        // First create a LIMIT BUY order
+        const createOrderDto = {
+          userId: testUserId,
+          instrumentId: testAaplId,
+          size: 5,
+          price: 145,
+          type: OrderType.LIMIT,
+          side: OrderSide.BUY,
+        };
+
+        const createResponse = await request(app.getHttpServer())
+          .post('/orders')
+          .send(createOrderDto)
+          .expect(201);
+
+        expect((createResponse.body as OrderResponse).status).toBe(
+          OrderStatus.NEW,
+        );
+        const orderId = (createResponse.body as OrderResponse).id;
+
+        // Check that balance was reserved
+        const balanceAfterOrder = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >(
+          'SELECT quantity, reserved FROM balances WHERE userid = $1 AND instrumentid = $2',
+          [testUserId, testArsId],
+        );
+        expect(Number(balanceAfterOrder[0].reserved)).toBeGreaterThan(0);
+
+        // Cancel the order
+        const cancelResponse = await request(app.getHttpServer())
+          .patch(`/orders/${orderId}/cancel`)
+          .expect(200);
+
+        expect((cancelResponse.body as OrderResponse).status).toBe(
+          OrderStatus.CANCELLED,
+        );
+
+        // Verify balance was restored
+        const balanceAfterCancel = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >(
+          'SELECT quantity, reserved FROM balances WHERE userid = $1 AND instrumentid = $2',
+          [testUserId, testArsId],
+        );
+        expect(Number(balanceAfterCancel[0].reserved)).toBe(0);
+        expect(Number(balanceAfterCancel[0].quantity)).toBe(10000);
+      });
+
+      it('should cancel a LIMIT SELL order without affecting balance', async () => {
+        // First create a LIMIT SELL order
+        const createOrderDto = {
+          userId: testUserId,
+          instrumentId: testAaplId,
+          size: 3,
+          price: 155,
+          type: OrderType.LIMIT,
+          side: OrderSide.SELL,
+        };
+
+        const createResponse = await request(app.getHttpServer())
+          .post('/orders')
+          .send(createOrderDto)
+          .expect(201);
+
+        expect((createResponse.body as OrderResponse).status).toBe(
+          OrderStatus.NEW,
+        );
+        const orderId = (createResponse.body as OrderResponse).id;
+
+        // Get balance before cancellation
+        const balanceBeforeCancel = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >(
+          'SELECT quantity, reserved FROM balances WHERE userid = $1 AND instrumentid = $2',
+          [testUserId, testArsId],
+        );
+
+        // Cancel the order
+        const cancelResponse = await request(app.getHttpServer())
+          .patch(`/orders/${orderId}/cancel`)
+          .expect(200);
+
+        expect((cancelResponse.body as OrderResponse).status).toBe(
+          OrderStatus.CANCELLED,
+        );
+
+        // Verify balance unchanged
+        const balanceAfterCancel = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >(
+          'SELECT quantity, reserved FROM balances WHERE userid = $1 AND instrumentid = $2',
+          [testUserId, testArsId],
+        );
+        expect(balanceAfterCancel[0].quantity).toBe(
+          balanceBeforeCancel[0].quantity,
+        );
+        expect(balanceAfterCancel[0].reserved).toBe(
+          balanceBeforeCancel[0].reserved,
+        );
+      });
+
+      it('should return 400 when trying to cancel FILLED order', async () => {
+        // First create a MARKET order (gets FILLED immediately)
+        const createOrderDto = {
+          userId: testUserId,
+          instrumentId: testAaplId,
+          size: 2,
+          type: OrderType.MARKET,
+          side: OrderSide.BUY,
+        };
+
+        const createResponse = await request(app.getHttpServer())
+          .post('/orders')
+          .send(createOrderDto)
+          .expect(201);
+
+        expect((createResponse.body as OrderResponse).status).toBe(
+          OrderStatus.FILLED,
+        );
+        const orderId = (createResponse.body as OrderResponse).id;
+
+        // Try to cancel the filled order
+        const cancelResponse = await request(app.getHttpServer())
+          .patch(`/orders/${orderId}/cancel`)
+          .expect(400);
+
+        expect((cancelResponse.body as ErrorResponse).message).toContain(
+          'Only orders with status NEW can be cancelled',
+        );
+      });
+
+      it('should return 404 when trying to cancel non-existent order', async () => {
+        await request(app.getHttpServer())
+          .patch('/orders/99999/cancel')
+          .expect(404);
       });
     });
   });

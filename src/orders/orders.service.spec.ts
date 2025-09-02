@@ -684,7 +684,7 @@ describe('OrdersService', () => {
   });
 
   describe('cancelOrder', () => {
-    it('should cancel an order with NEW status', async () => {
+    it('should cancel a BUY order with NEW status and rollback balances', async () => {
       const orderId = 1;
       const mockOrder = {
         id: orderId,
@@ -697,6 +697,38 @@ describe('OrdersService', () => {
         side: OrderSide.BUY,
         datetime: new Date(),
       };
+      const mockArsInstrument = { id: 66, ticker: 'ARS', type: 'MONEDA' };
+
+      mockOrderRepository.findOne.mockResolvedValue(mockOrder);
+      mockInstrumentRepository.findOne.mockResolvedValue(mockArsInstrument);
+      mockOrderRepository.save.mockResolvedValue({
+        ...mockOrder,
+        status: OrderStatus.CANCELLED,
+      });
+      mockManager.query.mockResolvedValue([]);
+
+      const result = await service.cancelOrder(orderId);
+
+      expect(result.status).toBe(OrderStatus.CANCELLED);
+      expect(mockManager.query).toHaveBeenCalledWith(
+        'UPDATE balances SET quantity = quantity + $1, reserved = reserved - $1 WHERE userid = $2 AND instrumentid = $3',
+        [1450, 1, 66],
+      );
+    });
+
+    it('should cancel a SELL order without balance rollback', async () => {
+      const orderId = 2;
+      const mockOrder = {
+        id: orderId,
+        status: OrderStatus.NEW,
+        userId: 1,
+        instrumentId: 1,
+        size: 5,
+        price: 150.0,
+        type: OrderType.LIMIT,
+        side: OrderSide.SELL,
+        datetime: new Date(),
+      };
 
       mockOrderRepository.findOne.mockResolvedValue(mockOrder);
       mockOrderRepository.save.mockResolvedValue({
@@ -707,7 +739,7 @@ describe('OrdersService', () => {
       const result = await service.cancelOrder(orderId);
 
       expect(result.status).toBe(OrderStatus.CANCELLED);
-      expect(mockOrderRepository.save).toHaveBeenCalled();
+      expect(mockManager.query).not.toHaveBeenCalled();
     });
 
     it('should throw error when trying to cancel a FILLED order', async () => {

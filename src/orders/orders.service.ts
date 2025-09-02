@@ -10,7 +10,6 @@ import { User } from '../users/user.entity';
 import { Instrument } from '../instruments/instrument.entity';
 import { MarketData } from '../marketdata/marketdata.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { Balance } from '../balances/balance.entity';
 
 @Injectable()
 export class OrdersService {
@@ -24,8 +23,6 @@ export class OrdersService {
     private instrumentRepository: Repository<Instrument>,
     @InjectRepository(MarketData)
     private marketDataRepository: Repository<MarketData>,
-    @InjectRepository(Balance)
-    private balancesRepository: Repository<Balance>,
   ) {}
 
   async createOrder(createOrderDto: CreateOrderDto): Promise<Order> {
@@ -242,22 +239,43 @@ export class OrdersService {
   }
 
   async cancelOrder(orderId: number): Promise<Order> {
-    const order = await this.orderRepository.findOne({
-      where: { id: orderId },
+    return await this.dataSource.transaction(async (manager) => {
+      const orderRepository = manager.getRepository(Order);
+      const order = await orderRepository.findOne({
+        where: { id: orderId },
+      });
+
+      if (!order) {
+        throw new NotFoundException(`Order with ID ${orderId} not found`);
+      }
+
+      if (order.status !== OrderStatus.NEW) {
+        throw new BadRequestException(
+          `Only orders with status NEW can be cancelled. Current status: ${order.status}`,
+        );
+      }
+
+      // For BUY orders, we need to rollback the reserved funds
+      if (order.side === OrderSide.BUY) {
+        const arsIinstrument = await this.instrumentRepository.findOne({
+          where: { ticker: 'ARS' },
+        });
+        if (!arsIinstrument) {
+          throw new NotFoundException(`ARS Instrument not found`);
+        }
+
+        const orderTotal = order.price * order.size;
+
+        // Rollback the balance changes: add back to quantity, reduce reserved
+        await manager.query(
+          'UPDATE balances SET quantity = quantity + $1, reserved = reserved - $1 WHERE userid = $2 AND instrumentid = $3',
+          [orderTotal, order.userId, arsIinstrument.id],
+        );
+      }
+
+      order.status = OrderStatus.CANCELLED;
+      return await orderRepository.save(order);
     });
-
-    if (!order) {
-      throw new NotFoundException(`Order with ID ${orderId} not found`);
-    }
-
-    if (order.status !== OrderStatus.NEW) {
-      throw new BadRequestException(
-        `Only orders with status NEW can be cancelled. Current status: ${order.status}`,
-      );
-    }
-
-    order.status = OrderStatus.CANCELLED;
-    return await this.orderRepository.save(order);
   }
 
   async getOrdersByUser(userId: number): Promise<Order[]> {
