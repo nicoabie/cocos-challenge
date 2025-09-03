@@ -156,18 +156,18 @@ export class OrdersService {
         });
       }
 
+      const status =
+        type === OrderType.LIMIT ? OrderStatus.NEW : OrderStatus.FILLED;
+      const order = await orderRepository.save({
+        userId,
+        instrumentId,
+        price: instrumentPrice,
+        size: computedSize,
+        side,
+        status,
+        type,
+      });
       if (side === OrderSide.BUY) {
-        const status =
-          type === OrderType.LIMIT ? OrderStatus.NEW : OrderStatus.FILLED;
-        const order = await orderRepository.save({
-          userId,
-          instrumentId,
-          price: instrumentPrice,
-          size: computedSize,
-          side,
-          status,
-          type,
-        });
         await orderRepository.save({
           userId,
           instrumentId: arsIinstrument.id,
@@ -193,19 +193,7 @@ export class OrdersService {
             [orderTotal, userId, arsIinstrument.id],
           );
         }
-        return order;
       } else {
-        const status =
-          type === OrderType.LIMIT ? OrderStatus.NEW : OrderStatus.FILLED;
-        const order = await orderRepository.save({
-          userId,
-          instrumentId,
-          price: instrumentPrice,
-          size: computedSize,
-          side,
-          status,
-          type,
-        });
         await orderRepository.save({
           userId,
           instrumentId: arsIinstrument.id,
@@ -232,9 +220,8 @@ export class OrdersService {
             [computedSize, userId, instrumentId],
           );
         }
-
-        return order;
       }
+      return order;
     });
   }
 
