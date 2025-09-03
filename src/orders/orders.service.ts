@@ -167,16 +167,18 @@ export class OrdersService {
         status,
         type,
       });
+      // counter order
+      await orderRepository.save({
+        userId,
+        instrumentId: arsIinstrument.id,
+        price: 1,
+        size: orderTotal,
+        side: this.getCounterOrderSide(side),
+        status,
+        type,
+      });
+
       if (side === OrderSide.BUY) {
-        await orderRepository.save({
-          userId,
-          instrumentId: arsIinstrument.id,
-          price: 1,
-          size: orderTotal,
-          side: OrderSide.CASH_OUT,
-          status,
-          type,
-        });
         await manager.query(
           'UPDATE balances SET quantity = quantity - $1 WHERE userid = $2 AND instrumentid = $3',
           [orderTotal, userId, arsIinstrument.id],
@@ -194,16 +196,6 @@ export class OrdersService {
           );
         }
       } else {
-        await orderRepository.save({
-          userId,
-          instrumentId: arsIinstrument.id,
-          price: 1,
-          size: orderTotal,
-          side: OrderSide.CASH_IN,
-          status,
-          type,
-        });
-
         if (status === OrderStatus.FILLED) {
           await manager.query(
             'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
@@ -287,6 +279,20 @@ export class OrdersService {
         return arsInstrumentId;
       case OrderSide.SELL:
         return actionInstrumentId;
+      default: {
+        const exhaustiveCheck: never = side;
+        // este return no se va a ejecutar
+        return exhaustiveCheck;
+      }
+    }
+  }
+
+  private getCounterOrderSide(side: OrderSide.BUY | OrderSide.SELL) {
+    switch (side) {
+      case OrderSide.BUY:
+        return OrderSide.CASH_OUT;
+      case OrderSide.SELL:
+        return OrderSide.CASH_IN;
       default: {
         const exhaustiveCheck: never = side;
         // este return no se va a ejecutar
