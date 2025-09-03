@@ -194,6 +194,12 @@ export class OrdersService {
             'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
             [orderTotal, userId, arsIinstrument.id],
           );
+        } else {
+          // reservo la cantidad para no sobre vender
+          await manager.query(
+            'UPDATE balances SET quantity = quantity - $1, reserved = reserved + $1 WHERE userid = $2 AND instrumentid = $3',
+            [computedSize, userId, instrumentId],
+          );
         }
 
         return order;

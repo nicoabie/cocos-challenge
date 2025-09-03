@@ -53,7 +53,7 @@ describe('Orders (e2e)', () => {
     if (users.length === 0) {
       const result = await dataSource.query<{ id: number }[]>(
         'INSERT INTO users (email, accountnumber) VALUES ($1, $2) RETURNING id',
-        ['test-e2e@test.com', '10002'],
+        ['test-e2e@test.com', '9999999'],
       );
       testUserId = result[0].id;
     } else {
@@ -433,7 +433,7 @@ describe('Orders (e2e)', () => {
         expect(Number(arsBalance.reserved)).toBe(1450); // Reserved for the order
       });
 
-      it('should create a LIMIT SELL order with NEW status', async () => {
+      it('should create a LIMIT SELL order with NEW status and reserve shares', async () => {
         const createOrderDto = {
           userId: testUserId,
           instrumentId: testAaplId,
@@ -485,6 +485,17 @@ describe('Orders (e2e)', () => {
         ]);
 
         expect(Number(arsBalance.quantity)).toBe(10000);
+
+        // Verify balances have changed for AAPL (shares are reserved)
+        const [aaplBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testAaplId,
+        ]);
+
+        expect(Number(aaplBalance.quantity)).toBe(45); // 50 - 5
+        expect(Number(aaplBalance.reserved)).toBe(5);
       });
     });
 
