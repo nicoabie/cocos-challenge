@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Order, OrderSide, OrderStatus, OrderType } from './order.entity';
 import { User } from '../users/user.entity';
 import { Instrument } from '../instruments/instrument.entity';
@@ -81,12 +81,12 @@ export class OrdersService {
             );
           }
           if (side === OrderSide.CASH_OUT) {
-            const res = await manager.query<{ available: string }[]>(
-              `SELECT quantity - reserved AS available FROM balances WHERE userid = $1 AND instrumentid = $2 FOR UPDATE`,
-              [userId, arsIinstrument.id],
-            );
+            const arsAvailable = await this.getInstrumentAvailability({
+              userId,
+              instrumentId: arsIinstrument.id,
+              manager,
+            });
 
-            const arsAvailable = !res[0] ? 0 : Number(res[0].available);
             if (arsAvailable < userDefinedAmount) {
               throw new BadRequestException('Insufficient balance');
             }
@@ -129,26 +129,34 @@ export class OrdersService {
 
       const orderTotal = instrumentPrice * computedSize;
 
+      const instrumentIdToDeductFrom = this.getInstrumentIdToDeductFrom({
+        actionInstrumentId: instrumentId,
+        arsInstrumentId: arsIinstrument.id,
+        side,
+      });
+
+      const instrumentAvailability = await this.getInstrumentAvailability({
+        userId,
+        instrumentId: instrumentIdToDeductFrom,
+        manager,
+      });
+
+      if (
+        (side === OrderSide.BUY && instrumentAvailability < orderTotal) ||
+        (side === OrderSide.SELL && computedSize > instrumentAvailability)
+      ) {
+        return await orderRepository.save({
+          userId,
+          instrumentId,
+          side,
+          size: computedSize,
+          price: instrumentPrice,
+          type,
+          status: OrderStatus.REJECTED,
+        });
+      }
+
       if (side === OrderSide.BUY) {
-        const res = await manager.query<{ available: string }[]>(
-          `SELECT quantity - reserved AS available FROM balances WHERE userid = $1 AND instrumentid = $2 FOR UPDATE`,
-          [userId, arsIinstrument.id],
-        );
-
-        const arsAvailable = !res[0] ? 0 : Number(res[0].available);
-
-        if (arsAvailable < orderTotal) {
-          return await orderRepository.save({
-            userId,
-            instrumentId,
-            side,
-            size: computedSize,
-            price: instrumentPrice,
-            type,
-            status: OrderStatus.REJECTED,
-          });
-        }
-
         const status =
           type === OrderType.LIMIT ? OrderStatus.NEW : OrderStatus.FILLED;
         const order = await orderRepository.save({
@@ -187,27 +195,6 @@ export class OrdersService {
         }
         return order;
       } else {
-        // TODO: hacer switch así queda claro que caso es.
-        // venta
-        const res = await manager.query<{ available: string }[]>(
-          `SELECT quantity - reserved AS available FROM balances WHERE userid = $1 AND instrumentid = $2 FOR UPDATE`,
-          [userId, instrument.id],
-        );
-
-        const actionAvailable = !res[0] ? 0 : Number(res[0].available);
-        // TODO el mecanismo de reject se puede extraer
-        if (computedSize > actionAvailable) {
-          return await orderRepository.save({
-            userId,
-            instrumentId,
-            side,
-            size: computedSize,
-            price: instrumentPrice,
-            type,
-            status: OrderStatus.REJECTED,
-          });
-        }
-
         const status =
           type === OrderType.LIMIT ? OrderStatus.NEW : OrderStatus.FILLED;
         const order = await orderRepository.save({
@@ -297,6 +284,45 @@ export class OrdersService {
       relations: ['instrument'],
       order: { datetime: 'DESC' },
     });
+  }
+
+  private getInstrumentIdToDeductFrom({
+    actionInstrumentId,
+    arsInstrumentId,
+    side,
+  }: {
+    actionInstrumentId: number;
+    arsInstrumentId: number;
+    side: OrderSide.BUY | OrderSide.SELL;
+  }) {
+    switch (side) {
+      case OrderSide.BUY:
+        return arsInstrumentId;
+      case OrderSide.SELL:
+        return actionInstrumentId;
+      default: {
+        const exhaustiveCheck: never = side;
+        // este return no se va a ejecutar
+        return exhaustiveCheck;
+      }
+    }
+  }
+
+  private async getInstrumentAvailability({
+    userId,
+    instrumentId,
+    manager,
+  }: {
+    userId: number;
+    instrumentId: number;
+    manager: EntityManager;
+  }): Promise<number> {
+    const res = await manager.query<{ available: string }[]>(
+      `SELECT quantity - reserved AS available FROM balances WHERE userid = $1 AND instrumentid = $2 FOR UPDATE`,
+      [userId, instrumentId],
+    );
+
+    return !res[0] ? 0 : Number(res[0].available);
   }
 
   private async getInstrumentPrice(
