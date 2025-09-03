@@ -268,6 +268,14 @@ export class OrdersService {
         );
       }
 
+      if (order.side === OrderSide.SELL) {
+        // Rollback the balance changes: add back to quantity, reduce reserved
+        await manager.query(
+          'UPDATE balances SET quantity = quantity + $1, reserved = reserved - $1 WHERE userid = $2 AND instrumentid = $3',
+          [order.size, order.userId, order.instrumentId],
+        );
+      }
+
       order.status = OrderStatus.CANCELLED;
       return await orderRepository.save(order);
     });

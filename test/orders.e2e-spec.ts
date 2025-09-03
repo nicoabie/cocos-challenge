@@ -1165,26 +1165,30 @@ describe('Orders (e2e)', () => {
     });
 
     describe('POST /orders/:id/cancel', () => {
+      // TODO do not create the order using the endpoint but in the database manually
       it('should cancel a LIMIT BUY order and rollback reserved balance', async () => {
-        // First create a LIMIT BUY order
-        const createOrderDto = {
-          userId: testUserId,
-          instrumentId: testAaplId,
-          size: 5,
-          price: 145,
-          type: OrderType.LIMIT,
-          side: OrderSide.BUY,
-        };
-
-        const createResponse = await request(app.getHttpServer())
-          .post('/orders')
-          .send(createOrderDto)
-          .expect(201);
-
-        expect((createResponse.body as OrderResponse).status).toBe(
-          OrderStatus.NEW,
+        // Create LIMIT BUY order directly in database
+        const orderResult = await dataSource.query<{ id: number }[]>(
+          `INSERT INTO orders (userid, instrumentid, size, price, type, side, status, datetime) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+           RETURNING id`,
+          [
+            testUserId,
+            testAaplId,
+            5,
+            145,
+            OrderType.LIMIT,
+            OrderSide.BUY,
+            OrderStatus.NEW,
+          ],
         );
-        const orderId = (createResponse.body as OrderResponse).id;
+        const orderId = orderResult[0].id;
+
+        // Manually reserve balance for the order (5 * 145 = 725)
+        await dataSource.query(
+          'UPDATE balances SET quantity = quantity - $1, reserved = reserved + $1 WHERE userid = $2 AND instrumentid = $3',
+          [725, testUserId, testArsId],
+        );
 
         // Check that balance was reserved
         const balanceAfterOrder = await dataSource.query<
@@ -1193,7 +1197,8 @@ describe('Orders (e2e)', () => {
           'SELECT quantity, reserved FROM balances WHERE userid = $1 AND instrumentid = $2',
           [testUserId, testArsId],
         );
-        expect(Number(balanceAfterOrder[0].reserved)).toBeGreaterThan(0);
+        expect(Number(balanceAfterOrder[0].reserved)).toBe(725);
+        expect(Number(balanceAfterOrder[0].quantity)).toBe(9275); // 10000 - 725
 
         // Cancel the order
         const cancelResponse = await request(app.getHttpServer())
@@ -1215,34 +1220,39 @@ describe('Orders (e2e)', () => {
         expect(Number(balanceAfterCancel[0].quantity)).toBe(10000);
       });
 
-      it('should cancel a LIMIT SELL order without affecting balance', async () => {
-        // First create a LIMIT SELL order
-        const createOrderDto = {
-          userId: testUserId,
-          instrumentId: testAaplId,
-          size: 3,
-          price: 155,
-          type: OrderType.LIMIT,
-          side: OrderSide.SELL,
-        };
-
-        const createResponse = await request(app.getHttpServer())
-          .post('/orders')
-          .send(createOrderDto)
-          .expect(201);
-
-        expect((createResponse.body as OrderResponse).status).toBe(
-          OrderStatus.NEW,
+      it('should cancel a LIMIT SELL order and rollback reserved shares', async () => {
+        // Create LIMIT SELL order directly in database
+        const orderResult = await dataSource.query<{ id: number }[]>(
+          `INSERT INTO orders (userid, instrumentid, size, price, type, side, status, datetime) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+           RETURNING id`,
+          [
+            testUserId,
+            testAaplId,
+            3,
+            155,
+            OrderType.LIMIT,
+            OrderSide.SELL,
+            OrderStatus.NEW,
+          ],
         );
-        const orderId = (createResponse.body as OrderResponse).id;
+        const orderId = orderResult[0].id;
 
-        // Get balance before cancellation
-        const balanceBeforeCancel = await dataSource.query<
+        // Manually reserve shares for the order (3 shares)
+        await dataSource.query(
+          'UPDATE balances SET quantity = quantity - $1, reserved = reserved + $1 WHERE userid = $2 AND instrumentid = $3',
+          [3, testUserId, testAaplId],
+        );
+
+        // Check that shares were reserved
+        const balanceAfterOrder = await dataSource.query<
           { quantity: string; reserved: string }[]
         >(
           'SELECT quantity, reserved FROM balances WHERE userid = $1 AND instrumentid = $2',
-          [testUserId, testArsId],
+          [testUserId, testAaplId],
         );
+        expect(Number(balanceAfterOrder[0].reserved)).toBe(3);
+        expect(Number(balanceAfterOrder[0].quantity)).toBe(47); // 50 - 3
 
         // Cancel the order
         const cancelResponse = await request(app.getHttpServer())
@@ -1253,40 +1263,34 @@ describe('Orders (e2e)', () => {
           OrderStatus.CANCELLED,
         );
 
-        // Verify balance unchanged
+        // Verify shares were restored
         const balanceAfterCancel = await dataSource.query<
           { quantity: string; reserved: string }[]
         >(
           'SELECT quantity, reserved FROM balances WHERE userid = $1 AND instrumentid = $2',
-          [testUserId, testArsId],
+          [testUserId, testAaplId],
         );
-        expect(balanceAfterCancel[0].quantity).toBe(
-          balanceBeforeCancel[0].quantity,
-        );
-        expect(balanceAfterCancel[0].reserved).toBe(
-          balanceBeforeCancel[0].reserved,
-        );
+        expect(Number(balanceAfterCancel[0].quantity)).toBe(50); // Shares restored
+        expect(Number(balanceAfterCancel[0].reserved)).toBe(0); // Reservation cleared
       });
 
       it('should return 400 when trying to cancel FILLED order', async () => {
-        // First create a MARKET order (gets FILLED immediately)
-        const createOrderDto = {
-          userId: testUserId,
-          instrumentId: testAaplId,
-          size: 2,
-          type: OrderType.MARKET,
-          side: OrderSide.BUY,
-        };
-
-        const createResponse = await request(app.getHttpServer())
-          .post('/orders')
-          .send(createOrderDto)
-          .expect(201);
-
-        expect((createResponse.body as OrderResponse).status).toBe(
-          OrderStatus.FILLED,
+        // Create FILLED order directly in database
+        const orderResult = await dataSource.query<{ id: number }[]>(
+          `INSERT INTO orders (userid, instrumentid, size, price, type, side, status, datetime) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+           RETURNING id`,
+          [
+            testUserId,
+            testAaplId,
+            2,
+            150,
+            OrderType.MARKET,
+            OrderSide.BUY,
+            OrderStatus.FILLED,
+          ],
         );
-        const orderId = (createResponse.body as OrderResponse).id;
+        const orderId = orderResult[0].id;
 
         // Try to cancel the filled order
         const cancelResponse = await request(app.getHttpServer())
