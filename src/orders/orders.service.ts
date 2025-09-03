@@ -178,41 +178,57 @@ export class OrdersService {
         type,
       });
 
-      if (side === OrderSide.BUY) {
-        await manager.query(
-          'UPDATE balances SET quantity = quantity - $1 WHERE userid = $2 AND instrumentid = $3',
-          [orderTotal, userId, arsIinstrument.id],
-        );
-        if (status === OrderStatus.FILLED) {
-          await manager.query(
-            'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
-            [computedSize, userId, instrumentId],
-          );
-        }
-        if (status === OrderStatus.NEW) {
-          await manager.query(
-            'UPDATE balances SET reserved = reserved + $1 WHERE userid = $2 AND instrumentid = $3',
-            [orderTotal, userId, arsIinstrument.id],
-          );
-        }
-      } else {
-        if (status === OrderStatus.FILLED) {
-          await manager.query(
-            'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
-            [orderTotal, userId, arsIinstrument.id],
-          );
+      switch (side) {
+        case OrderSide.BUY: {
+          // estoy comprando entonces necesariamente necesito deducir los ARS
           await manager.query(
             'UPDATE balances SET quantity = quantity - $1 WHERE userid = $2 AND instrumentid = $3',
-            [computedSize, userId, instrumentId],
+            [orderTotal, userId, arsIinstrument.id],
           );
-        } else {
-          // reservo la cantidad para no sobre vender
-          await manager.query(
-            'UPDATE balances SET quantity = quantity - $1, reserved = reserved + $1 WHERE userid = $2 AND instrumentid = $3',
-            [computedSize, userId, instrumentId],
-          );
+          // si la orden es filled me hago del instrumento
+          if (status === OrderStatus.FILLED) {
+            await manager.query(
+              'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
+              [computedSize, userId, instrumentId],
+            );
+          }
+          // si es NEW los pesos quedan freezados
+          if (status === OrderStatus.NEW) {
+            await manager.query(
+              'UPDATE balances SET reserved = reserved + $1 WHERE userid = $2 AND instrumentid = $3',
+              [orderTotal, userId, arsIinstrument.id],
+            );
+          }
+          break;
+        }
+        case OrderSide.SELL: {
+          if (status === OrderStatus.FILLED) {
+            // me hago de pesos
+            await manager.query(
+              'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
+              [orderTotal, userId, arsIinstrument.id],
+            );
+            // y deshago del instrumento
+            await manager.query(
+              'UPDATE balances SET quantity = quantity - $1 WHERE userid = $2 AND instrumentid = $3',
+              [computedSize, userId, instrumentId],
+            );
+          } else {
+            // reservo la cantidad para no sobre vender
+            await manager.query(
+              'UPDATE balances SET quantity = quantity - $1, reserved = reserved + $1 WHERE userid = $2 AND instrumentid = $3',
+              [computedSize, userId, instrumentId],
+            );
+          }
+          break;
+        }
+        default: {
+          const exhaustiveCheck: never = side;
+          // este return no se va a ejecutar
+          return exhaustiveCheck;
         }
       }
+
       return order;
     });
   }
