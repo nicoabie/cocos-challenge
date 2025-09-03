@@ -894,6 +894,158 @@ describe('Orders (e2e)', () => {
       });
     });
 
+    describe('Cash Operations', () => {
+      it('should create a successful MARKET CASH_IN order for ARS', async () => {
+        const createOrderDto = {
+          userId: testUserId,
+          instrumentId: testArsId,
+          totalAmount: 5000,
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_IN,
+        };
+
+        const response = await request(app.getHttpServer())
+          .post('/orders')
+          .send(createOrderDto)
+          .expect(201);
+
+        // Verify response
+        expect(response.body).toMatchObject({
+          userId: testUserId,
+          instrumentId: testArsId,
+          size: 5000,
+          price: 1,
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_IN,
+          status: OrderStatus.FILLED,
+        });
+
+        // Verify database state - orders
+        const orders = await dataSource.query<any[]>(
+          'SELECT * FROM orders WHERE userid = $1 ORDER BY datetime DESC',
+          [testUserId],
+        );
+
+        expect(orders).toHaveLength(1);
+
+        // Single cash in order
+        expect(orders[0]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testArsId,
+          size: 5000,
+          price: '1.00',
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_IN,
+          status: OrderStatus.FILLED,
+        });
+
+        // Verify database state - balances
+        const [arsBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testArsId,
+        ]);
+
+        expect(Number(arsBalance.quantity)).toBe(15000); // 10000 + 5000
+        expect(Number(arsBalance.reserved)).toBe(0);
+      });
+
+      it('should create a successful MARKET CASH_OUT order for ARS', async () => {
+        const createOrderDto = {
+          userId: testUserId,
+          instrumentId: testArsId,
+          totalAmount: 3000,
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_OUT,
+        };
+
+        const response = await request(app.getHttpServer())
+          .post('/orders')
+          .send(createOrderDto)
+          .expect(201);
+
+        // Verify response
+        expect(response.body).toMatchObject({
+          userId: testUserId,
+          instrumentId: testArsId,
+          size: 3000,
+          price: 1,
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_OUT,
+          status: OrderStatus.FILLED,
+        });
+
+        // Verify database state - orders
+        const orders = await dataSource.query<any[]>(
+          'SELECT * FROM orders WHERE userid = $1 ORDER BY datetime DESC',
+          [testUserId],
+        );
+
+        expect(orders).toHaveLength(1);
+
+        // Single cash out order
+        expect(orders[0]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testArsId,
+          size: 3000,
+          price: '1.00',
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_OUT,
+          status: OrderStatus.FILLED,
+        });
+
+        // Verify database state - balances
+        const [arsBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testArsId,
+        ]);
+
+        expect(Number(arsBalance.quantity)).toBe(7000); // 10000 - 3000
+        expect(Number(arsBalance.reserved)).toBe(0);
+      });
+
+      it('should reject MARKET CASH_OUT when insufficient ARS balance', async () => {
+        const createOrderDto = {
+          userId: testUserId,
+          instrumentId: testArsId,
+          totalAmount: 15000, // User only has 10000 ARS
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_OUT,
+        };
+
+        const response = await request(app.getHttpServer())
+          .post('/orders')
+          .send(createOrderDto)
+          .expect(400);
+
+        // Verify error message
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        expect(response.body.message).toContain('Insufficient balance');
+
+        // Verify database state - order should be rejected
+        const orders = await dataSource.query<{ status: string }[]>(
+          'SELECT * FROM orders WHERE userid = $1',
+          [testUserId],
+        );
+
+        expect(orders).toHaveLength(0);
+
+        // Verify balances haven't changed
+        const [arsBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testArsId,
+        ]);
+
+        expect(Number(arsBalance.quantity)).toBe(10000);
+        expect(Number(arsBalance.reserved)).toBe(0);
+      });
+    });
+
     describe('Validation Errors', () => {
       it('should return 400 when userId is missing', async () => {
         const createOrderDto = {
@@ -936,63 +1088,6 @@ describe('Orders (e2e)', () => {
           .post('/orders')
           .send(createOrderDto)
           .expect(400);
-      });
-
-      it('should allow CASH_IN orders for ARS', async () => {
-        const createOrderDto = {
-          userId: testUserId,
-          instrumentId: testArsId,
-          size: 1000,
-          price: 1,
-          type: OrderType.MARKET,
-          side: OrderSide.CASH_IN,
-        };
-
-        const response = await request(app.getHttpServer())
-          .post('/orders')
-          .send(createOrderDto);
-
-        if (response.status !== 201) {
-          console.log('CASH_IN error:', response.status, response.body);
-        }
-
-        expect(response.status).toBe(201);
-
-        expect(response.body).toMatchObject({
-          userId: testUserId,
-          instrumentId: testArsId,
-          size: 1000,
-          price: 1,
-          type: OrderType.MARKET,
-          side: OrderSide.CASH_IN,
-          status: OrderStatus.FILLED,
-        });
-      });
-
-      it('should allow CASH_OUT orders for ARS', async () => {
-        const createOrderDto = {
-          userId: testUserId,
-          instrumentId: testArsId,
-          size: 500,
-          price: 1,
-          type: OrderType.MARKET,
-          side: OrderSide.CASH_OUT,
-        };
-
-        const response = await request(app.getHttpServer())
-          .post('/orders')
-          .send(createOrderDto)
-          .expect(201);
-
-        expect(response.body).toMatchObject({
-          userId: testUserId,
-          instrumentId: testArsId,
-          size: 500,
-          price: 1,
-          type: OrderType.MARKET,
-          side: OrderSide.CASH_OUT,
-          status: OrderStatus.FILLED,
-        });
       });
 
       it('should return 404 when user does not exist', async () => {

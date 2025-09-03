@@ -61,38 +61,84 @@ export class OrdersService {
       throw new NotFoundException(`ARS Instrument not found`);
     }
 
-    let instrumentPrice: number;
+    return await this.dataSource.transaction(async (manager) => {
+      const orderRepository = manager.getRepository(Order);
 
-    if (arsIinstrument.id === instrument.id) {
-      if (
-        type === OrderType.MARKET &&
-        (side === OrderSide.CASH_IN || side === OrderSide.CASH_OUT)
-      ) {
-        // los ARS siempre tiene precio de 1.
-        instrumentPrice = 1;
-      } else {
+      if (side === OrderSide.CASH_IN || side === OrderSide.CASH_OUT) {
+        if (type !== OrderType.MARKET) {
+          throw new BadRequestException(
+            'CASH_IN / CASH_OUT orders must be of type MARKET',
+          );
+        }
+        if (!userDefinedAmount) {
+          throw new BadRequestException('Need an amount');
+        }
+        if (arsIinstrument.id === instrument.id) {
+          if (side === OrderSide.CASH_IN) {
+            const order = await orderRepository.save({
+              userId,
+              instrumentId,
+              side,
+              size: userDefinedAmount,
+              price: 1,
+              type,
+              status: OrderStatus.FILLED,
+            });
+            await manager.query(
+              'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
+              [userDefinedAmount, userId, arsIinstrument.id],
+            );
+            return order;
+          }
+          if (side === OrderSide.CASH_OUT) {
+            const res = await manager.query<{ available: string }[]>(
+              `SELECT quantity - reserved AS available FROM balances WHERE userid = $1 AND instrumentid = $2 FOR UPDATE`,
+              [userId, arsIinstrument.id],
+            );
+
+            const arsAvailable = !res[0] ? 0 : Number(res[0].available);
+            if (arsAvailable < userDefinedAmount) {
+              throw new BadRequestException('Insufficient balance');
+            }
+
+            const order = await orderRepository.save({
+              userId,
+              instrumentId,
+              side,
+              size: userDefinedAmount,
+              price: 1,
+              type,
+              status: OrderStatus.FILLED,
+            });
+            await manager.query(
+              'UPDATE balances SET quantity = quantity - $1 WHERE userid = $2 AND instrumentid = $3',
+              [userDefinedAmount, userId, arsIinstrument.id],
+            );
+            return order;
+          }
+        } else {
+          throw new BadRequestException('Only ARS can be CASHED_IN/CASHED_OUT');
+        }
+      }
+
+      if (arsIinstrument.id === instrument.id) {
         // esto no estaba literal en el enunciado pero tiene sentido dada la consigna
         // solo se compran y venden acciones
         throw new BadRequestException('Cannot buy or sell ARS');
       }
-    } else {
-      // For non-ARS instruments, get price normally
-      instrumentPrice = await this.getInstrumentPrice(
+
+      const instrumentPrice = await this.getInstrumentPrice(
         instrumentId,
         type,
         userDefinedPrice,
       );
-    }
 
-    const computedSize =
-      // tengo que castear a number porque ts no entiende que size es undefined userDefinedAmount no puede serlo.
-      userDefinedSize ??
-      Math.floor((userDefinedAmount as number) / instrumentPrice);
+      const computedSize =
+        // tengo que castear a number porque ts no entiende que size es undefined userDefinedAmount no puede serlo.
+        userDefinedSize ??
+        Math.floor((userDefinedAmount as number) / instrumentPrice);
 
-    const orderTotal = instrumentPrice * computedSize;
-
-    return await this.dataSource.transaction(async (manager) => {
-      const orderRepository = manager.getRepository(Order);
+      const orderTotal = instrumentPrice * computedSize;
 
       if (side === OrderSide.BUY) {
         const res = await manager.query<{ available: string }[]>(
