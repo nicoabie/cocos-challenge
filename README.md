@@ -8,21 +8,9 @@ El objetivo fue resolver la problemática propuesta de manera clara y funcional,
 
 ## 🚀 Tecnologías principales
 
-- **NestJS**: framework elegido para estructurar la aplicación.
-- **TypeORM**: ORM requerido para el challenge.  
+- **NestJS**: framework elegido para estructurar la aplicación (dado que nunca la había usado me pareció interesante para aprender algo nuevo, me recordó muchísimo a angular2 2015). 
+- **TypeORM**: ORM (por lo que tengo entendido lo usan en cocos).  
 - **PostgreSQL**: base de datos principal.  
-
----
-
-## 🔍 Extras (no esenciales para el challenge)
-
-Me gusta investigar y probar cosas nuevas, por eso incorporé algunas herramientas adicionales que no eran estrictamente necesarias pero aportaron valor al proceso:
-
-- **ClickHouse**  
-- **Debezium**  
-- **Effect-TS**  
-
-> Nota: estas integraciones son opcionales. Lo único realmente indispensable para correr el challenge es la base de datos PostgreSQL.
 
 ---
 
@@ -35,7 +23,8 @@ El proyecto incluye un `docker-compose.yml` que levanta:
 - Debezium Connect.  
 - Zookeeper.  
 
-Si bien están ahí para jugar y experimentar, la aplicación únicamente depende de **PostgreSQL**.  
+Si bien están ahí para jugar y experimentar, la aplicación únicamente depende de **PostgreSQL**.
+Queria ver cómo era posible una integración entre estas tecnologías ya que por lo que me comentaron en el proceso de entrevista lo vienen barajando.
 
 ---
 
@@ -43,9 +32,10 @@ Si bien están ahí para jugar y experimentar, la aplicación únicamente depend
 
 - **`entendimiento.sql`**  
   Este archivo es casi un “diario de desarrollo”. Documenta el razonamiento y pasos que me llevaron a la solución propuesta. Recomiendo leerlo porque refleja mejor cómo abordé la problemática.  
-
 - **`API.md`** 
   Contiene ejemplos de como correr la api 
+- **`database.sql`** 
+  Contiene la base de datos revisada del proceso de entendimiento
 ---
 
 ## ⚙️ Configuración y ejecución
@@ -81,10 +71,10 @@ De todas formas, me resultó útil para ahorrar tiempo en la parte de testing.
 
 ## 🤓 Reflexión
 
-- Este challenge me permitió aprender un poco de **NestJS** (que hasta ahora no había usado) y de **TypeORM** (que tampoco había usado pero es requerido para el pusto :P).  
+- Este challenge me permitió aprender un poco de **NestJS** (que hasta ahora no había usado) y de **TypeORM** (que tampoco había usado pero es requerido para el puesto :P).  
 - Soy bastante particular con los ORMs… debo decir que he usado peores 😅.  
 - Disfruté pensar la problemática y tratar de resolverla con un toque divertido.  
-- Me entretuve mucho probando tecnologías paralelas, aunque debería haber arrancado con lo esencial antes de jugar tanto.  
+- Me entretuve mucho probando tecnologías paralelas (effect-ts, clickhouse, debezium), aunque debería haber arrancado con lo esencial antes de jugar tanto.  
 
 ---
 
