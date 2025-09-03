@@ -135,3 +135,23 @@ curl -X GET http://localhost:3000/users/1/portfolio
   ]
 }
 ```
+
+#### GET /instruments/search?=
+Busca instrumentos o lista todos
+
+```bash
+curl -X GET http://localhost:3000/instruments/search?q=ars
+```
+
+**Respuesta:**
+```json
+[
+  {
+    "id": 66,
+    "ticker": "ARS",
+    "name": "PESOS",
+    "type": "MONEDA"
+  }
+]
+```
+

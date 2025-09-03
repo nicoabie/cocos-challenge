@@ -40,6 +40,8 @@ Queria ver cómo era posible una integración entre estas tecnologías ya que po
   Contiene toda la logica de orders + una implementación parcial de cancel orden que estaba fuera de scope pero quería mostrar un poco cómo sería
 - **`orders.e2e-spec.ts`** 
   Contiene tests extensivos de la api de orders pegandole directamente a la api y haciendo asserts sobre el estado de la base de datos
+- **`balances.service.ts`** 
+  Contiene la logica de generación de balances y explicaciones
 ---
 
 ## ⚙️ Configuración y ejecución
@@ -50,9 +52,9 @@ Queria ver cómo era posible una integración entre estas tecnologías ya que po
    npm install
    ```  
 3. Crear un archivo `.env` a partir de `.env.example`. Se puede usar tal cual está para conectarse al PostgreSQL de Docker.  
-4. Levantar los servicios de Docker:  
+4. Levantar los servicios de Docker: (solo postgres es necesario, sino va a bajar las otras deps y el reviewer me va a querer matar 😅)  
    ```bash
-   docker compose up -d
+   docker compose up postgres -d
    ```  
 5. El archivo `database.sql` tiene la version revisada de la base de datos con todas las correcciones y actualizaciones que surgieron de `entendimiento.sql`
 6. Iniciar la aplicación Nest:  
@@ -75,12 +77,12 @@ De todas formas, me resultó útil para ahorrar tiempo en la parte de testing.
 
 ## 🤓 Reflexión
 
-- Este challenge me permitió aprender un poco de **NestJS** (que hasta ahora no había usado) y de **TypeORM** (que tampoco había usado pero es requerido para el puesto :P).  
-- Soy bastante particular con los ORMs… debo decir que he usado peores 😅.  
+- Este challenge me permitió aprender un poco de **NestJS** (que hasta ahora no había usado) y de **TypeORM** (que tampoco había usado pero es requerido para el puesto 😛).  
+- Soy bastante particular con los ORMs… debo decir que he usado peores 🙈.  
 - Disfruté pensar la problemática y tratar de resolverla con un toque divertido.  
 - Me entretuve mucho probando tecnologías paralelas (effect-ts, clickhouse, debezium), aunque debería haber arrancado con lo esencial antes de jugar tanto.  
-
-
+- Espero haber demostrado lo que sé y mi capacidad de aprender cosas nuevas.
+- Traté de hacerlo ameno para el revisor, espero que disfrute leyendo mis comentarios
 
 ---
 

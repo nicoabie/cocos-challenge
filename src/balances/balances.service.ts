@@ -124,6 +124,34 @@ export class BalancesService {
       [userId, userId],
     );
 
+    // la parte destacable de la query de arriba es esta:
+    //     ROUND(
+    //   (
+    //     ((b.total_quantity - COALESCE(s.total_sold, 0)) * lp.close)
+    //     - (b.total_invested - COALESCE(s.total_sales, 0))
+    //   )
+    //   / NULLIF((b.total_invested - COALESCE(s.total_sales, 0)), 0) * 100,
+    //   2
+    // ) AS return_pct
+
+    // es una manera de calcular el rendimiento pero podemos ver que cada vez que un usuario quiera ver su portfolio estoy haciendo un recorrido por todas sus
+    // ordenes lo cual no es nada performante. para hacerlo más eficiente podríamos crear una tabla materializada de "posiciones"
+    // 1. cantidad neta
+    // 2. costo neto
+    // 3. inversión neta
+    // 4. usuario
+    // 5. instrumento
+
+    // escuchar el CDC de postgres y cada vez que una orden pasa a filled actualizar posiciones,
+    // que por cierto ya deberíamos tener un CDC para escuchar cuando creamos una orden en NEW y reaccionar
+
+    // luego es cuentis de cambiar la query
+    // SELECT pos.*, lp.close, (pos.quantity * lp.close) AS current_value, ...
+    // FROM positions pos
+    // JOIN last_price lp ...
+
+    // pasamos de leer muchisimas ordenes a solo las posiciones del usuario
+
     // es importante destacar que si bien tengo que obtener todas las posiciones, la parte heavy de la cuenta se hace en la base de datos.
     // esto es una decisión consciente dado que las bases de datos están optimizadas para ese tipo de trabajo y nodejs es single threaded.
     // si dedico mucho tiempo en atender una petición, eso hace que las demás requests deban esperar por como funciona el event loop.
