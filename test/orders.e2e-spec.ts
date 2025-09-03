@@ -291,6 +291,7 @@ describe('Orders (e2e)', () => {
         ]);
 
         expect(Number(arsBalance.quantity)).toBe(10750); // 10000 + 750
+        expect(Number(arsBalance.reserved)).toBe(0);
 
         const [aaplBalance] = await dataSource.query<
           { quantity: string; reserved: string }[]
