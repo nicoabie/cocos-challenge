@@ -75,20 +75,10 @@ export class OrdersService {
         }
         if (arsIinstrument.id === instrument.id) {
           if (side === OrderSide.CASH_IN) {
-            const order = await orderRepository.save({
-              userId,
-              instrumentId,
-              side,
-              size: userDefinedAmount,
-              price: 1,
-              type,
-              status: OrderStatus.FILLED,
-            });
             await manager.query(
               'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
               [userDefinedAmount, userId, arsIinstrument.id],
             );
-            return order;
           }
           if (side === OrderSide.CASH_OUT) {
             const res = await manager.query<{ available: string }[]>(
@@ -101,21 +91,20 @@ export class OrdersService {
               throw new BadRequestException('Insufficient balance');
             }
 
-            const order = await orderRepository.save({
-              userId,
-              instrumentId,
-              side,
-              size: userDefinedAmount,
-              price: 1,
-              type,
-              status: OrderStatus.FILLED,
-            });
             await manager.query(
               'UPDATE balances SET quantity = quantity - $1 WHERE userid = $2 AND instrumentid = $3',
               [userDefinedAmount, userId, arsIinstrument.id],
             );
-            return order;
           }
+          return await orderRepository.save({
+            userId,
+            instrumentId,
+            side,
+            size: userDefinedAmount,
+            price: 1,
+            type,
+            status: OrderStatus.FILLED,
+          });
         } else {
           throw new BadRequestException('Only ARS can be CASHED_IN/CASHED_OUT');
         }
