@@ -233,6 +233,9 @@ export class OrdersService {
     });
   }
 
+  // TODO esto debería correr dentro de una transacción y cancelar el correspondiente CASH_IN o CASH_OUT
+  // para hacer eso de manera eficiente podríamos agregar en la tabla orders una columna transaction_id
+  // que sirva para linkear cada orden con su contra orden
   async cancelOrder(orderId: number): Promise<Order> {
     return await this.dataSource.transaction(async (manager) => {
       const orderRepository = manager.getRepository(Order);

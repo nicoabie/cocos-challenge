@@ -36,6 +36,10 @@ Queria ver cómo era posible una integración entre estas tecnologías ya que po
   Contiene ejemplos de como correr la api 
 - **`database.sql`** 
   Contiene la base de datos revisada del proceso de entendimiento
+- **`orders.service.ts`** 
+  Contiene toda la logica de orders + una implementación parcial de cancel orden que estaba fuera de scope pero quería mostrar un poco cómo sería
+- **`orders.e2e-spec.ts`** 
+  Contiene tests extensivos de la api de orders pegandole directamente a la api y haciendo asserts sobre el estado de la base de datos
 ---
 
 ## ⚙️ Configuración y ejecución
@@ -75,6 +79,8 @@ De todas formas, me resultó útil para ahorrar tiempo en la parte de testing.
 - Soy bastante particular con los ORMs… debo decir que he usado peores 😅.  
 - Disfruté pensar la problemática y tratar de resolverla con un toque divertido.  
 - Me entretuve mucho probando tecnologías paralelas (effect-ts, clickhouse, debezium), aunque debería haber arrancado con lo esencial antes de jugar tanto.  
+
+
 
 ---
 

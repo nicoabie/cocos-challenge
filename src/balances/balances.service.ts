@@ -20,27 +20,15 @@ export class BalancesService {
     private balancesRepository: Repository<Balance>,
   ) {}
 
-  getUserTickerAvailabilityBaseQuery(userId: number, ticker: string) {
-    return this.balancesRepository
-      .createQueryBuilder('balance')
-      .innerJoin('balance.instrument', 'instrument')
-      .where('balance.userId = :userId', { userId })
-      .andWhere('instrument.ticker = :ticker', { ticker });
-    // por alguna razón no puedo llamar a setLock si no estoy dentro de una transacction.
-    // lo cual no sé si tiene mucho sentido dado que en el motor de base de datos puedo hacer
-    // un select for update sin una y sin problemas.
-    // así que expongo este método para en order service poder llamar a setLock...
-    // .setLock('pessimistic_write')
-  }
-
   async getUserInstrumentAvailability(
     userId: number,
     ticker: string,
   ): Promise<number> {
-    const balance = await this.getUserTickerAvailabilityBaseQuery(
-      userId,
-      ticker,
-    )
+    const balance = await this.balancesRepository
+      .createQueryBuilder('balance')
+      .innerJoin('balance.instrument', 'instrument')
+      .where('balance.userId = :userId', { userId })
+      .andWhere('instrument.ticker = :ticker', { ticker })
       .select()
       .getOne();
 
