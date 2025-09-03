@@ -721,6 +721,153 @@ describe('Orders (e2e)', () => {
         expect(Number(aaplBalance.quantity)).toBe(50);
         expect(Number(aaplBalance.reserved)).toBe(0);
       });
+
+      it('should calculate size from totalAmount for MARKET SELL orders', async () => {
+        const createOrderDto = {
+          userId: testUserId,
+          instrumentId: testAaplId,
+          totalAmount: 750, // Should sell 5 shares at 150 each
+          type: OrderType.MARKET,
+          side: OrderSide.SELL,
+        };
+
+        const response = await request(app.getHttpServer())
+          .post('/orders')
+          .send(createOrderDto)
+          .expect(201);
+
+        // Verify response
+        expect(response.body).toMatchObject({
+          userId: testUserId,
+          instrumentId: testAaplId,
+          size: 5, // 750 / 150 = 5
+          price: '150.00',
+          type: OrderType.MARKET,
+          side: OrderSide.SELL,
+          status: OrderStatus.FILLED,
+        });
+
+        // Verify database state - orders
+        const orders = await dataSource.query<any[]>(
+          'SELECT * FROM orders WHERE userid = $1 ORDER BY datetime DESC',
+          [testUserId],
+        );
+
+        expect(orders).toHaveLength(2);
+
+        // Main order
+        expect(orders[0]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testAaplId,
+          size: 5,
+          price: '150.00',
+          type: OrderType.MARKET,
+          side: OrderSide.SELL,
+          status: OrderStatus.FILLED,
+        });
+
+        // Cash in order
+        expect(orders[1]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testArsId,
+          size: 750,
+          price: '1.00',
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_IN,
+          status: OrderStatus.FILLED,
+        });
+
+        // Verify database state - balances
+        const [arsBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testArsId,
+        ]);
+
+        expect(Number(arsBalance.quantity)).toBe(10750); // 10000 + 750
+        expect(Number(arsBalance.reserved)).toBe(0);
+
+        const [aaplBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testAaplId,
+        ]);
+
+        // MARKET orders should update balance immediately when FILLED
+        expect(Number(aaplBalance.quantity)).toBe(45); // 50 - 5
+        expect(Number(aaplBalance.reserved)).toBe(0);
+      });
+
+      it('should calculate size from totalAmount for LIMIT SELL orders', async () => {
+        const createOrderDto = {
+          userId: testUserId,
+          instrumentId: testAaplId,
+          totalAmount: 775, // Should sell 5 shares at 155 each
+          price: 155,
+          type: OrderType.LIMIT,
+          side: OrderSide.SELL,
+        };
+
+        const response = await request(app.getHttpServer())
+          .post('/orders')
+          .send(createOrderDto)
+          .expect(201);
+
+        // Verify response
+        expect(response.body).toMatchObject({
+          userId: testUserId,
+          instrumentId: testAaplId,
+          size: 5, // 775 / 155 = 5
+          price: 155,
+          type: OrderType.LIMIT,
+          side: OrderSide.SELL,
+          status: OrderStatus.NEW,
+        });
+
+        // Verify database state - orders
+        const orders = await dataSource.query<any[]>(
+          'SELECT * FROM orders WHERE userid = $1 ORDER BY datetime DESC',
+          [testUserId],
+        );
+
+        expect(orders).toHaveLength(1);
+
+        // Main order (no cash in order for LIMIT SELL)
+        expect(orders[0]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testAaplId,
+          size: 5, // 775 / 155 = 5
+          price: '155.00',
+          type: OrderType.LIMIT,
+          side: OrderSide.SELL,
+          status: OrderStatus.NEW,
+        });
+
+        // Verify database state - balances
+        const [arsBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testArsId,
+        ]);
+
+        // ARS balance unchanged for LIMIT SELL
+        expect(Number(arsBalance.quantity)).toBe(10000);
+        expect(Number(arsBalance.reserved)).toBe(0);
+
+        const [aaplBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testAaplId,
+        ]);
+
+        // Shares are reserved for LIMIT SELL
+        expect(Number(aaplBalance.quantity)).toBe(45); // 50 - 5
+        expect(Number(aaplBalance.reserved)).toBe(5); // 5 shares reserved
+      });
     });
 
     describe('Validation Errors', () => {
