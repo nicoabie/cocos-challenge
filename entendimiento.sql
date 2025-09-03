@@ -45,7 +45,7 @@ CREATE TABLE instruments (
   id SERIAL PRIMARY KEY,
   ticker VARCHAR(10) NOT NULL,
   name VARCHAR(255) NOT NULL ,
-  type VARCHAR(10) CHECK (type IN ('ACCION', 'MONEDA')) NOT NULL
+  type VARCHAR(10) CHECK (type IN ('ACCIONES', 'MONEDA')) NOT NULL
 );
 
 -- acá la verdad es que no son muchos activos y los campos de nombre y ticker
@@ -62,6 +62,15 @@ CREATE TABLE instruments (
 ALTER TABLE instruments
 ADD CONSTRAINT instruments_ticker_unique UNIQUE (ticker);
 
+-- users
+--------
+
+-- mismo constraint unique deberíamos agregarle al accountNunber
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  email VARCHAR(255),
+  accountNumber VARCHAR(20) UNIQUE
+);
 
 -- orders
 ---------
@@ -80,8 +89,8 @@ CREATE TABLE orders (
   size INT CHECK (size > 0) NOT NULL,
   price NUMERIC(10, 2) CHECK (price > 0) NOT NULL,
   type VARCHAR(10) CHECK (type IN ('MARKET', 'LIMIT')) NOT NULL,
-  side VARCHAR(10) CHECK (type IN ('BULL', 'SELL', 'CASH_IN', 'CASH_OUT')) NOT NULL,
-  status VARCHAR(20) CHECK (type IN ('NEW', 'FILLED', 'REJECTED', 'CANCELLED')) NOT NULL,
+  side VARCHAR(10) CHECK (side IN ('BUY', 'SELL', 'CASH_IN', 'CASH_OUT')) NOT NULL,
+  status VARCHAR(20) CHECK (status IN ('NEW', 'FILLED', 'REJECTED', 'CANCELLED')) NOT NULL,
   datetime TIMESTAMP DEFAULT NOW() NOT NULL,
   FOREIGN KEY (instrumentId) REFERENCES instruments(id),
   FOREIGN KEY (userId) REFERENCES users(id)
@@ -113,10 +122,12 @@ CREATE TABLE balances (
 -- tiene sentido que cuando se hace una compra de una accion haya un cash out de pesos y cuando se haga una venta de una accion 
 -- haya un cash in de pesos. así te queda como un double entry ledger y esto nos va a permitir generar la tabla de balances.
 
+WITH ARS AS (
+	select id from instruments where ticker = 'ARS'
+)
 INSERT INTO orders (instrumentId, userId, size, price, side, type, status, datetime)
 SELECT
-	-- instrumento ARS
-	66 AS instrumentId,
+	a.id,
 	o.userid,
 	size * price AS size,
 	1 AS price,
@@ -124,11 +135,12 @@ SELECT
 		WHEN o.side = 'BUY' THEN 'CASH_OUT'
 		WHEN o.side = 'SELL' THEN 'CASH_IN'
 	END AS side,
-	type,
+	o.type,
 	status,
 	datetime
 FROM
 	orders o
+	CROSS JOIN ARS a
 WHERE
 	o.side IN ('BUY', 'SELL')
 	AND o.status != 'REJECTED';

@@ -60,7 +60,8 @@ Si bien están ahí para jugar y experimentar, la aplicación únicamente depend
    ```bash
    docker compose up -d
    ```  
-5. Iniciar la aplicación Nest:  
+5. El archivo `database.sql` tiene la version revisada de la base de datos con todas las correcciones y actualizaciones que surgieron de `entendimiento.sql`
+6. Iniciar la aplicación Nest:  
    ```bash
    npm run start
    ```  
