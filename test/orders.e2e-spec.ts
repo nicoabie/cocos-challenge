@@ -525,11 +525,13 @@ describe('Orders (e2e)', () => {
 
         // Verify database state - orders
         const orders = await dataSource.query<any[]>(
-          'SELECT * FROM orders WHERE userid = $1',
+          'SELECT * FROM orders WHERE userid = $1 ORDER BY datetime DESC',
           [testUserId],
         );
 
-        expect(orders).toHaveLength(1);
+        expect(orders).toHaveLength(2);
+
+        // Main order
         expect(orders[0]).toMatchObject({
           userid: testUserId,
           instrumentid: testAaplId,
@@ -537,6 +539,17 @@ describe('Orders (e2e)', () => {
           price: '155.00',
           type: OrderType.LIMIT,
           side: OrderSide.SELL,
+          status: OrderStatus.NEW,
+        });
+
+        // Cash in order for LIMIT SELL
+        expect(orders[1]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testArsId,
+          size: 775, // 5 * 155 = 775
+          price: '1.00',
+          type: OrderType.LIMIT,
+          side: OrderSide.CASH_IN,
           status: OrderStatus.NEW,
         });
 
@@ -832,9 +845,9 @@ describe('Orders (e2e)', () => {
           [testUserId],
         );
 
-        expect(orders).toHaveLength(1);
+        expect(orders).toHaveLength(2);
 
-        // Main order (no cash in order for LIMIT SELL)
+        // Main order
         expect(orders[0]).toMatchObject({
           userid: testUserId,
           instrumentid: testAaplId,
@@ -842,6 +855,17 @@ describe('Orders (e2e)', () => {
           price: '155.00',
           type: OrderType.LIMIT,
           side: OrderSide.SELL,
+          status: OrderStatus.NEW,
+        });
+
+        // Cash in order for LIMIT SELL
+        expect(orders[1]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testArsId,
+          size: 775, // 5 * 155 = 775
+          price: '1.00',
+          type: OrderType.LIMIT,
+          side: OrderSide.CASH_IN,
           status: OrderStatus.NEW,
         });
 

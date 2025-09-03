@@ -184,18 +184,17 @@ export class OrdersService {
           status,
           type,
         });
+        await orderRepository.save({
+          userId,
+          instrumentId: arsIinstrument.id,
+          price: 1,
+          size: orderTotal,
+          side: OrderSide.CASH_IN,
+          status,
+          type,
+        });
 
         if (status === OrderStatus.FILLED) {
-          await orderRepository.save({
-            userId,
-            instrumentId: arsIinstrument.id,
-            price: 1,
-            size: orderTotal,
-            side: OrderSide.CASH_IN,
-            status,
-            type,
-          });
-
           await manager.query(
             'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
             [orderTotal, userId, arsIinstrument.id],
