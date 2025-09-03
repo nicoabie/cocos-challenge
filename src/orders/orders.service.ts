@@ -138,6 +138,12 @@ export class OrdersService {
           'UPDATE balances SET quantity = quantity - $1 WHERE userid = $2 AND instrumentid = $3',
           [orderTotal, userId, arsIinstrument.id],
         );
+        if (status === OrderStatus.FILLED) {
+          await manager.query(
+            'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
+            [computedSize, userId, instrumentId],
+          );
+        }
         if (status === OrderStatus.NEW) {
           await manager.query(
             'UPDATE balances SET reserved = reserved + $1 WHERE userid = $2 AND instrumentid = $3',
@@ -193,6 +199,10 @@ export class OrdersService {
           await manager.query(
             'UPDATE balances SET quantity = quantity + $1 WHERE userid = $2 AND instrumentid = $3',
             [orderTotal, userId, arsIinstrument.id],
+          );
+          await manager.query(
+            'UPDATE balances SET quantity = quantity - $1 WHERE userid = $2 AND instrumentid = $3',
+            [computedSize, userId, instrumentId],
           );
         } else {
           // reservo la cantidad para no sobre vender

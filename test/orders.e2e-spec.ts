@@ -214,6 +214,17 @@ describe('Orders (e2e)', () => {
 
         expect(Number(arsBalance.quantity)).toBe(8500); // 10000 - 1500
         expect(Number(arsBalance.reserved)).toBe(0);
+
+        const [aaplBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testAaplId,
+        ]);
+
+        // MARKET orders should update balance immediately when FILLED
+        expect(Number(aaplBalance.quantity)).toBe(60); // 50 + 10
+        expect(Number(aaplBalance.reserved)).toBe(0);
       });
 
       it('should create a MARKET SELL order and update balances', async () => {
@@ -280,6 +291,17 @@ describe('Orders (e2e)', () => {
         ]);
 
         expect(Number(arsBalance.quantity)).toBe(10750); // 10000 + 750
+
+        const [aaplBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testAaplId,
+        ]);
+
+        // MARKET orders should update balance immediately when FILLED
+        expect(Number(aaplBalance.quantity)).toBe(45); // 50 - 5
+        expect(Number(aaplBalance.reserved)).toBe(0);
       });
 
       it('should reject a MARKET BUY order when insufficient funds', async () => {
@@ -326,6 +348,16 @@ describe('Orders (e2e)', () => {
 
         expect(Number(arsBalance.quantity)).toBe(10000);
         expect(Number(arsBalance.reserved)).toBe(0);
+
+        const [aaplBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testAaplId,
+        ]);
+
+        expect(Number(aaplBalance.quantity)).toBe(50);
+        expect(Number(aaplBalance.reserved)).toBe(0);
       });
 
       it('should reject a MARKET SELL order when insufficient shares', async () => {
@@ -361,6 +393,27 @@ describe('Orders (e2e)', () => {
 
         expect(orders).toHaveLength(1);
         expect(orders[0]?.status).toBe(OrderStatus.REJECTED);
+
+        // Verify balances haven't changed
+        const [arsBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testArsId,
+        ]);
+
+        expect(Number(arsBalance.quantity)).toBe(10000);
+        expect(Number(arsBalance.reserved)).toBe(0);
+
+        const [aaplBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testAaplId,
+        ]);
+
+        expect(Number(aaplBalance.quantity)).toBe(50);
+        expect(Number(aaplBalance.reserved)).toBe(0);
       });
     });
 
@@ -431,6 +484,17 @@ describe('Orders (e2e)', () => {
 
         expect(Number(arsBalance.quantity)).toBe(8550); // 10000 - 1450
         expect(Number(arsBalance.reserved)).toBe(1450); // Reserved for the order
+
+        const [aaplBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testAaplId,
+        ]);
+
+        // aapl balance is not yet reflected
+        expect(Number(aaplBalance.quantity)).toBe(50);
+        expect(Number(aaplBalance.reserved)).toBe(0);
       });
 
       it('should create a LIMIT SELL order with NEW status and reserve shares', async () => {
@@ -485,6 +549,7 @@ describe('Orders (e2e)', () => {
         ]);
 
         expect(Number(arsBalance.quantity)).toBe(10000);
+        expect(Number(arsBalance.reserved)).toBe(0);
 
         // Verify balances have changed for AAPL (shares are reserved)
         const [aaplBalance] = await dataSource.query<
@@ -524,6 +589,58 @@ describe('Orders (e2e)', () => {
           side: OrderSide.BUY,
           status: OrderStatus.FILLED,
         });
+
+        // Verify database state - orders
+        const orders = await dataSource.query<any[]>(
+          'SELECT * FROM orders WHERE userid = $1 ORDER BY datetime DESC',
+          [testUserId],
+        );
+
+        expect(orders).toHaveLength(2);
+
+        // Main order
+        expect(orders[0]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testAaplId,
+          size: 10,
+          price: '150.00',
+          type: OrderType.MARKET,
+          side: OrderSide.BUY,
+          status: OrderStatus.FILLED,
+        });
+
+        // Cash out order
+        expect(orders[1]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testArsId,
+          size: 1500,
+          price: '1.00',
+          type: OrderType.MARKET,
+          side: OrderSide.CASH_OUT,
+          status: OrderStatus.FILLED,
+        });
+
+        // Verify database state - balances
+        const [arsBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testArsId,
+        ]);
+
+        expect(Number(arsBalance.quantity)).toBe(8500); // 10000 - 1500
+        expect(Number(arsBalance.reserved)).toBe(0);
+
+        const [aaplBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testAaplId,
+        ]);
+
+        // MARKET orders should update balance immediately when FILLED
+        expect(Number(aaplBalance.quantity)).toBe(60); // 50 + 10
+        expect(Number(aaplBalance.reserved)).toBe(0);
       });
 
       it('should calculate size from totalAmount for LIMIT orders', async () => {
@@ -551,6 +668,58 @@ describe('Orders (e2e)', () => {
           side: OrderSide.BUY,
           status: OrderStatus.NEW,
         });
+
+        // Verify database state - orders
+        const orders = await dataSource.query<any[]>(
+          'SELECT * FROM orders WHERE userid = $1 ORDER BY datetime DESC',
+          [testUserId],
+        );
+
+        expect(orders).toHaveLength(2);
+
+        // Main order
+        expect(orders[0]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testAaplId,
+          size: 10, // 1450 / 145 = 10
+          price: '145.00',
+          type: OrderType.LIMIT,
+          side: OrderSide.BUY,
+          status: OrderStatus.NEW,
+        });
+
+        // Cash out order
+        expect(orders[1]).toMatchObject({
+          userid: testUserId,
+          instrumentid: testArsId,
+          size: 1450,
+          price: '1.00',
+          type: OrderType.LIMIT,
+          side: OrderSide.CASH_OUT,
+          status: OrderStatus.NEW,
+        });
+
+        // Verify database state - balances
+        const [arsBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testArsId,
+        ]);
+
+        expect(Number(arsBalance.quantity)).toBe(8550); // 10000 - 1450
+        expect(Number(arsBalance.reserved)).toBe(1450);
+
+        const [aaplBalance] = await dataSource.query<
+          { quantity: string; reserved: string }[]
+        >('SELECT * FROM balances WHERE userid = $1 AND instrumentid = $2', [
+          testUserId,
+          testAaplId,
+        ]);
+
+        // don't have the shares yet
+        expect(Number(aaplBalance.quantity)).toBe(50);
+        expect(Number(aaplBalance.reserved)).toBe(0);
       });
     });
 
